@@ -1,4 +1,4 @@
-# Monte Carlo Stock Simulator — v3.3
+# Monte Carlo Stock Simulator — v3.4
 
 Aplicación web completa para simulación Monte Carlo de acciones bursátiles con diseño LiquidGlass. Desplegada en GitHub Pages, sin servidor, sin build step, sin backend.
 
@@ -252,6 +252,14 @@ Son simulaciones basadas en datos históricos y modelos estocásticos.
 ---
 
 ## Changelog
+
+### v3.4 — PDF enriquecido con técnicos, opciones e insider trading
+
+- **Análisis Técnico en PDF** — Nueva sección con tabla de 4 bloques: medias móviles (MA20/50/200 + Golden/Death Cross), RSI (14) + zona, MACD (12,26,9) con cruce, Bollinger (20,2σ), soporte/resistencia 52s y ATR/volumen. Score técnico compuesto 0–100 con badge de color.
+- **Opciones en PDF** — Nueva sección con volumen calls/puts, P/C ratio, open interest, IV implícita ATM promedio y señal de sentimiento institucional (badge coloreado).
+- **Insider Trading en PDF** — Nueva sección con tabla de Form 4 (SEC EDGAR, últimos 90 días): nombre insider, fecha filing y tipo. Muestra también % propiedad insiders e institucional si está disponible.
+- **`exporter.js` v3.4** — Firma de `exportSimulationPDF` ampliada de 7 a 10 parámetros (`technicals`, `optionsData`, `insiders`). Secciones numeradas del 1 al 11. CSS nuevo para los bloques de técnicos y opciones.
+- **`app.js`** — Tres llamadas a `exportSimulationPDF` actualizadas para pasar `currentTechnicals`, `currentOptions` y `currentInsiders`.
 
 ### v3.3 — Análisis técnico, opciones, Reddit, insiders, earnings, correlación
 

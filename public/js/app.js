@@ -323,7 +323,7 @@ function setupNavigation() {
     }
   });
   $('#exportPdfBtn')?.addEventListener('click', () => {
-    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData);
+    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
   });
 }
 
@@ -550,7 +550,7 @@ async function runSimulation() {
       const fresh = pdfHeaderBtn.cloneNode(true);
       pdfHeaderBtn.parentNode.replaceChild(fresh, pdfHeaderBtn);
       fresh.addEventListener('click', () => {
-        exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData);
+        exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
       });
     }
 
@@ -718,7 +718,7 @@ function renderOverviewTab(results, metrics, currency, s0, backtest) {
     exportSimulationCSV(currentSymbol, currentResults, currentMetrics);
   });
   document.getElementById('exportPdfBtn')?.addEventListener('click', () => {
-    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData);
+    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
   });
 }
 

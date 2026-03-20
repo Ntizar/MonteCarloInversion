@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    exporter.js — Exportación PDF (vía window.print) y CSV
-   Monte Carlo Stock Simulator v3.0
+   Monte Carlo Stock Simulator v3.4
    ═══════════════════════════════════════════════════════════════════ */
 
 import { getCurrency } from './config.js';
@@ -205,8 +205,11 @@ export function exportMarketRankingCSV(rankingItems, label = 'mercado') {
  * @param {object} fundamentals — fundamentals data (may be null)
  * @param {object} news         — news + sentiment data (may be null)
  * @param {object} macroData    — macro context data (may be null)
+ * @param {object} technicals   — computed technicals object (may be null)
+ * @param {object} optionsData  — options Put/Call data (may be null)
+ * @param {object} insiders     — insider trading data (may be null)
  */
-export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData) {
+export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData, technicals, optionsData, insiders) {
   const ts = new Date().toLocaleString('es-ES');
   const currency = getCurrency(symbol);
 
@@ -442,6 +445,209 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
     </section>
   ` : '';
 
+  // ── Section 8: Technical Analysis ───────────────────────────────
+  const techHTML = technicals ? (() => {
+    const t = technicals;
+    const fmt = (v, d = 2) => v != null ? Number(v).toFixed(d) : '—';
+    const pct  = (v, d = 1) => v != null ? `${Number(v).toFixed(d)}%` : '—';
+
+    const trendStyle = t.trendColor
+      ? `color:${t.trendColor};font-weight:bold`
+      : '';
+
+    const rsiStyle = t.rsi14 != null
+      ? `color:${t.rsi14 < 30 ? '#0a7c3e' : t.rsi14 > 70 ? '#b91c1c' : '#92400e'}`
+      : '';
+
+    const macdHistStyle = (t.macd?.histogram ?? 0) >= 0
+      ? 'color:#0a7c3e'
+      : 'color:#b91c1c';
+
+    const macdCruce = t.macd?.histogram != null && t.macd?.histPrev != null
+      ? (t.macd.histogram > 0 && t.macd.histPrev <= 0
+          ? '↑ Alcista'
+          : t.macd.histogram < 0 && t.macd.histPrev >= 0
+            ? '↓ Bajista'
+            : '—')
+      : '—';
+
+    const crossLabel = t.crossRecent
+      ? (t.goldenCross ? 'Golden Cross reciente' : 'Death Cross reciente')
+      : (t.goldenCross ? 'MA50 > MA200' : 'MA50 < MA200');
+
+    return `
+    <section>
+      <h2>Análisis Técnico</h2>
+      <div class="tech-pdf-header">
+        <span class="tech-pdf-badge" style="background:${t.trendColor ?? '#555'};color:#fff;padding:3px 10px;border-radius:3px;font-weight:bold">${t.trend ?? '—'}</span>
+        &nbsp; Score técnico: <strong>${t.score ?? '—'}/100</strong>
+        &nbsp; · &nbsp; Bull: ${t.bullPoints ?? 0} pts &nbsp; Bear: ${t.bearPoints ?? 0} pts
+      </div>
+      <div class="tech-pdf-grid">
+        <div class="tech-pdf-block">
+          <div class="tech-pdf-block-title">Medias Móviles</div>
+          <table>
+            <tbody>
+              <tr><td>MA 20</td><td>${fmt(t.ma20)}</td></tr>
+              <tr><td>MA 50</td><td>${fmt(t.ma50)}</td></tr>
+              <tr><td>MA 200</td><td>${fmt(t.ma200)}</td></tr>
+              <tr><td>Relación MA</td><td style="${t.goldenCross ? 'color:#0a7c3e' : 'color:#b91c1c'}">${crossLabel}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tech-pdf-block">
+          <div class="tech-pdf-block-title">RSI (14)</div>
+          <table>
+            <tbody>
+              <tr><td>RSI</td><td style="${rsiStyle}">${fmt(t.rsi14, 1)}</td></tr>
+              <tr><td>Zona</td><td>${t.rsiZone ?? '—'}</td></tr>
+            </tbody>
+          </table>
+          <div class="tech-pdf-block-title" style="margin-top:8px">MACD (12,26,9)</div>
+          <table>
+            <tbody>
+              <tr><td>Línea</td><td>${fmt(t.macd?.value, 3)}</td></tr>
+              <tr><td>Señal</td><td>${fmt(t.macd?.signal, 3)}</td></tr>
+              <tr><td>Histograma</td><td style="${macdHistStyle}">${fmt(t.macd?.histogram, 3)}</td></tr>
+              <tr><td>Cruce</td><td>${macdCruce}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tech-pdf-block">
+          <div class="tech-pdf-block-title">Bollinger (20, 2σ)</div>
+          <table>
+            <tbody>
+              <tr><td>Superior</td><td>${fmt(t.bollinger?.upper)}</td></tr>
+              <tr><td>Media</td><td>${fmt(t.bollinger?.middle)}</td></tr>
+              <tr><td>Inferior</td><td>${fmt(t.bollinger?.lower)}</td></tr>
+              <tr><td>Posición %B</td><td>${t.bollinger?.position != null ? t.bollinger.position.toFixed(0) + '%' : '—'}</td></tr>
+              <tr><td>Anchura</td><td>${pct(t.bollinger?.width)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tech-pdf-block">
+          <div class="tech-pdf-block-title">Soporte & Resistencia (52s)</div>
+          <table>
+            <tbody>
+              <tr><td>Resistencia</td><td style="color:#b91c1c">${fmt(t.resistance)} <small>(-${t.distResistance}%)</small></td></tr>
+              <tr><td>Precio actual</td><td><strong>${fmt(t.current)}</strong></td></tr>
+              <tr><td>Soporte</td><td style="color:#0a7c3e">${fmt(t.support)} <small>(+${t.distSupport}%)</small></td></tr>
+            </tbody>
+          </table>
+          <div class="tech-pdf-block-title" style="margin-top:8px">Volatilidad & Volumen</div>
+          <table>
+            <tbody>
+              <tr><td>ATR (14)</td><td>${fmt(t.atr)}</td></tr>
+              <tr><td>ATR %</td><td>${pct(t.atrPct)}</td></tr>
+              <tr><td>Volumen</td><td>${t.volTrend ?? '—'}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `})() : '';
+
+  // ── Section 9: Options ───────────────────────────────────────────
+  const optionsHTML = optionsData ? (() => {
+    const o = optionsData;
+    const fmt = v => v != null ? v.toLocaleString('es-ES') : '—';
+    const fmtR = v => v != null ? v.toFixed(3) : '—';
+    const sentStyle = o.sentimentColor
+      ? `background:${o.sentimentColor};color:#fff;padding:3px 10px;border-radius:3px;font-weight:bold`
+      : '';
+    return `
+    <section>
+      <h2>Opciones — Put/Call Ratio</h2>
+      <div class="options-pdf-header">
+        <span style="${sentStyle}">${o.sentiment ?? '—'}</span>
+        &nbsp; Próx. vencimiento: <strong>${o.nextExpiration ?? '—'}</strong>
+        &nbsp; · &nbsp; ${o.expirations?.length ?? 0} vencimientos disponibles
+      </div>
+      <div class="options-pdf-grid">
+        <div class="options-pdf-block">
+          <div class="tech-pdf-block-title">Volumen</div>
+          <table>
+            <tbody>
+              <tr><td>Calls</td><td style="color:#0a7c3e">${fmt(o.callVolume)}</td></tr>
+              <tr><td>Puts</td><td style="color:#b91c1c">${fmt(o.putVolume)}</td></tr>
+              <tr><td>Total</td><td>${fmt(o.totalVolume)}</td></tr>
+              <tr><td>P/C Ratio (vol.)</td><td><strong>${fmtR(o.pcRatioVol)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="options-pdf-block">
+          <div class="tech-pdf-block-title">Open Interest</div>
+          <table>
+            <tbody>
+              <tr><td>Calls OI</td><td style="color:#0a7c3e">${fmt(o.callOI)}</td></tr>
+              <tr><td>Puts OI</td><td style="color:#b91c1c">${fmt(o.putOI)}</td></tr>
+              <tr><td>Total OI</td><td>${fmt(o.totalOI)}</td></tr>
+              <tr><td>P/C Ratio (OI)</td><td><strong>${fmtR(o.pcRatioOI)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="options-pdf-block">
+          <div class="tech-pdf-block-title">Volatilidad Implícita</div>
+          <table>
+            <tbody>
+              <tr><td>IV promedio ATM</td><td><strong>${o.impliedVolatility != null ? o.impliedVolatility + '%' : '—'}</strong></td></tr>
+              <tr><td>Contratos calls</td><td>${o.callsCount ?? '—'}</td></tr>
+              <tr><td>Contratos puts</td><td>${o.putsCount ?? '—'}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p style="font-size:9px;color:#888;margin-top:6px">P/C Ratio &lt; 0.7 = optimismo institucional &nbsp;·&nbsp; &gt; 1.0 = precaución &nbsp;·&nbsp; &gt; 1.5 = pesimismo</p>
+    </section>
+  `})() : '';
+
+  // ── Section 10: Insider Trading ──────────────────────────────────
+  const insidersHTML = (() => {
+    const insidersPct = fundamentals?.info?.insidersPercent ?? null;
+    const instPct     = fundamentals?.info?.institutionsPercent ?? null;
+    const ownershipRow = (insidersPct != null || instPct != null)
+      ? `<tr>
+          ${insidersPct != null ? `<td colspan="3">Propiedad insiders: <strong>${Number(insidersPct).toFixed(2)}%</strong></td>` : '<td colspan="3">—</td>'}
+          ${instPct != null ? `<td colspan="3">Propiedad institucional: <strong>${Number(instPct).toFixed(2)}%</strong></td>` : '<td colspan="3">—</td>'}
+         </tr>`
+      : '';
+
+    if (!insiders?.transactions?.length) {
+      if (!ownershipRow) return '';
+      return `
+      <section>
+        <h2>Insider Trading & Propiedad</h2>
+        <table><tbody>${ownershipRow}</tbody></table>
+        <p style="font-size:9px;color:#888">No se encontraron filings Form 4 recientes en SEC EDGAR (puede que sea un activo no-USA)</p>
+      </section>`;
+    }
+
+    const timeAgo = (dateStr) => {
+      if (!dateStr) return '';
+      const d = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+      return `hace ${d}d`;
+    };
+
+    const rows = insiders.transactions.map(t => `
+      <tr>
+        <td>${t.insiderName ?? '—'}</td>
+        <td>${t.filedDate ?? '—'} <small style="color:#888">${timeAgo(t.filedDate)}</small></td>
+        <td>Form ${t.formType ?? '4'}</td>
+      </tr>
+    `).join('');
+
+    return `
+    <section>
+      <h2>Insider Trading (SEC EDGAR — últimos 90 días)</h2>
+      ${ownershipRow ? `<table><tbody>${ownershipRow}</tbody></table>` : ''}
+      <table>
+        <thead><tr><th>Insider</th><th>Fecha filing</th><th>Tipo</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>
+  `;
+  })();
+
   // ── Assemble full HTML document ──────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -491,6 +697,17 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
   /* Disclaimer */
   .disclaimer { margin-top: 24px; font-size: 9px; color: #888; border-top: 1px solid #ddd; padding-top: 8px; line-height: 1.6; }
 
+  /* Technical Analysis */
+  .tech-pdf-header { margin-bottom: 10px; font-size: 11px; }
+  .tech-pdf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 4px; }
+  .tech-pdf-block { background: #f9f9f7; border: 1px solid #e0d9b5; border-radius: 4px; padding: 8px 10px; }
+  .tech-pdf-block-title { font-weight: bold; font-size: 9px; text-transform: uppercase; color: #555; margin-bottom: 4px; border-bottom: 1px solid #e0d9b5; padding-bottom: 2px; }
+
+  /* Options */
+  .options-pdf-header { margin-bottom: 10px; font-size: 11px; }
+  .options-pdf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+  .options-pdf-block { background: #f9f9f7; border: 1px solid #e0d9b5; border-radius: 4px; padding: 8px 10px; }
+
   /* Print */
   @media print {
     body { padding: 8px 10px; }
@@ -503,7 +720,7 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
 <body>
 
 <h1>Monte Carlo Stock Simulator — ${symbol}</h1>
-<div class="meta">Informe generado el ${ts} &nbsp;·&nbsp; Monte Carlo Stock Simulator v3.0 &nbsp;·&nbsp; Datos: Yahoo Finance (sin garantía de exactitud)</div>
+<div class="meta">Informe generado el ${ts} &nbsp;·&nbsp; Monte Carlo Stock Simulator v3.4 &nbsp;·&nbsp; Datos: Yahoo Finance (sin garantía de exactitud)</div>
 
 <!-- 1. Signal Summary -->
 <section>
@@ -545,12 +762,21 @@ ${fundHTML}
 <!-- 7. News / Sentiment -->
 ${newsHTML}
 
-<!-- 8. Disclaimer -->
+<!-- 8. Technical Analysis -->
+${techHTML}
+
+<!-- 9. Options -->
+${optionsHTML}
+
+<!-- 10. Insider Trading -->
+${insidersHTML}
+
+<!-- 11. Disclaimer -->
 <div class="disclaimer">
   <strong>Aviso legal:</strong> Los resultados de este simulador son de naturaleza puramente estadística y se basan en datos históricos.
   No constituyen asesoramiento financiero, de inversión, legal ni fiscal. Las simulaciones de Monte Carlo no garantizan resultados futuros.
   Invierta únicamente el capital que esté dispuesto a perder. Consulte a un asesor financiero certificado antes de tomar decisiones de inversión.
-  Monte Carlo Stock Simulator v3.0 &nbsp;·&nbsp; Datos proporcionados por Yahoo Finance sin garantía de exactitud ni integridad.
+  Monte Carlo Stock Simulator v3.4 &nbsp;·&nbsp; Datos proporcionados por Yahoo Finance sin garantía de exactitud ni integridad.
 </div>
 
 </body>
