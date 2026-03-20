@@ -14,8 +14,58 @@ import {
 import { setupPortfolioTool } from './portfolio.js';
 import { fetchMacroData, renderMacroPanel, renderMacroContextCard } from './macro.js';
 import { fetchFundamentals, renderFundamentalsCard } from './fundamentals.js';
-import { fetchNews, renderNewsCard } from './news.js';
+import { fetchStockNews as fetchNews, renderNewsCard } from './news.js';
 import { exportSimulationCSV, exportMarketRankingCSV, exportSimulationPDF } from './exporter.js';
+
+// ── Web Worker ───────────────────────────────────────────────────
+let _simWorker = null;
+
+function getSimWorker() {
+  if (!_simWorker) {
+    _simWorker = new Worker(new URL('./simulation-worker.js', import.meta.url), { type: 'module' });
+  }
+  return _simWorker;
+}
+
+function runSimulationsViaWorker(logReturns, s0, horizon, nSim, modelIds, seed, onProgress) {
+  return new Promise((resolve, reject) => {
+    const worker = getSimWorker();
+    function handler(e) {
+      const { type, payload } = e.data;
+      if (type === 'PROGRESS') {
+        onProgress?.(payload);
+      } else if (type === 'SIM_DONE') {
+        worker.removeEventListener('message', handler);
+        resolve(payload); // { results, metrics }
+      } else if (type === 'ERROR') {
+        worker.removeEventListener('message', handler);
+        reject(new Error(payload.message));
+      }
+    }
+    worker.addEventListener('message', handler);
+    worker.postMessage({ type: 'RUN_SIMULATIONS', payload: { logReturns, s0, horizon, nSim, modelIds, seed } });
+  });
+}
+
+function runBacktestViaWorker(prices, dates, modelIds, options, onProgress) {
+  return new Promise((resolve, reject) => {
+    const worker = getSimWorker();
+    function handler(e) {
+      const { type, payload } = e.data;
+      if (type === 'PROGRESS') {
+        onProgress?.(payload);
+      } else if (type === 'BACKTEST_DONE') {
+        worker.removeEventListener('message', handler);
+        resolve(payload.backtest);
+      } else if (type === 'ERROR') {
+        worker.removeEventListener('message', handler);
+        reject(new Error(payload.message));
+      }
+    }
+    worker.addEventListener('message', handler);
+    worker.postMessage({ type: 'RUN_BACKTEST', payload: { prices, dates, modelIds, options } });
+  });
+}
 
 // ── State ────────────────────────────────────────────────────────
 let currentSymbol = null;
@@ -423,23 +473,18 @@ async function runSimulation() {
   showLoading('Ejecutando simulaciones Monte Carlo...');
 
   try {
-    const results = await runAllSimulations(logReturns, s0, horizon, nSim, selectedModels, 42, (id, done, total) => {
-      const pct = Math.round((done / total) * 55);
-      updateLoadingProgress(pct, `${MODELS[id]?.name || id}...`);
-    });
+    const { results, metrics } = await runSimulationsViaWorker(
+      logReturns, s0, horizon, nSim, selectedModels, 42,
+      ({ pct, message }) => updateLoadingProgress(pct, message)
+    );
 
     currentResults = results;
-
-    // Compute metrics for each model
-    currentMetrics = {};
-    for (const [id, result] of Object.entries(results)) {
-      currentMetrics[id] = computeRiskMetrics(result, logReturns);
-    }
+    currentMetrics = metrics;
 
     currentBacktest = null;
     try {
       updateLoadingProgress(55, 'Validando cómo habría funcionado hace 1 año...');
-      currentBacktest = await runHistoricalBacktest(
+      currentBacktest = await runBacktestViaWorker(
         currentData.adjClose,
         currentData.dates,
         selectedModels,
@@ -452,10 +497,9 @@ async function runSimulation() {
           neutralBandPct: DEFAULTS.backtestNeutralBandPct,
           seed: 4200,
         },
-        ({ modelId, checkpointIndex, checkpointCount, done, total }) => {
-          const pct = 55 + Math.round((done / total) * 45);
-          const modelName = MODELS[modelId]?.name || modelId;
-          updateLoadingProgress(pct, `Backtest ${modelName} · corte ${checkpointIndex}/${checkpointCount}`);
+        ({ pct, message, modelId, checkpointIndex, checkpointCount }) => {
+          const modelName = MODELS[modelId]?.name || modelId || '';
+          updateLoadingProgress(pct, message || `Backtest ${modelName} · corte ${checkpointIndex}/${checkpointCount}`);
         }
       );
     } catch (backtestError) {

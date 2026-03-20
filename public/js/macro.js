@@ -77,7 +77,7 @@ async function fetchFREDSeries(seriesId, transform = null, limit = 36) {
   startDate.setFullYear(startDate.getFullYear() - 4);
   const dateStr = startDate.toISOString().split('T')[0];
 
-  const url = `${FRED_BASE}?id=${seriesId}&vintage_date=${dateStr}`;
+  const url = `${FRED_BASE}?id=${seriesId}&observation_start=${dateStr}`;
 
   try {
     const csvText = await fetchWithProxy(url);
@@ -182,6 +182,47 @@ export async function fetchMacroContext() {
   await setCachedMacro(cacheKey, context);
   return context;
 }
+
+/**
+ * Renderiza el panel macro del home (macro panel container)
+ */
+export function renderMacroPanel(container, context) {
+  if (!container) return;
+  if (!context) { container.innerHTML = '<p class="macro-unavailable">Datos macro no disponibles</p>'; return; }
+  container.innerHTML = renderMacroContextCard(context);
+}
+
+/**
+ * Devuelve HTML de la tarjeta de contexto macro (para la pestaña Context)
+ */
+export function renderMacroContextCard(context) {
+  if (!context) return '<p class="context-unavailable">Datos macro no disponibles</p>';
+  const ind = context.indicators || {};
+  const signalColors = { FAVORABLE: '#10B981', MIXTO: '#E8C547', ADVERSO: '#EF4444' };
+  const signalColor = signalColors[context.signal] || '#9A7B2C';
+  const fmt = (v) => v != null ? v : '—';
+  return `
+    <div class="macro-context-card">
+      <div class="macro-signal-row">
+        <span class="macro-signal-badge" style="background:${signalColor}">${context.signal ?? '—'}</span>
+        <span class="macro-signal-score">Score ${context.score ?? '—'}</span>
+        <span class="macro-signal-msg">${context.message ?? ''}</span>
+      </div>
+      <div class="macro-indicators-grid">
+        ${ind.fed_rate ? `<div class="macro-ind"><span class="macro-ind-label">${ind.fed_rate.label}</span><span class="macro-ind-val">${fmt(ind.fed_rate.value)}${ind.fed_rate.unit}</span></div>` : ''}
+        ${ind.inflation ? `<div class="macro-ind"><span class="macro-ind-label">${ind.inflation.label}</span><span class="macro-ind-val">${fmt(ind.inflation.value)}${ind.inflation.unit}</span></div>` : ''}
+        ${ind.vix ? `<div class="macro-ind"><span class="macro-ind-label">${ind.vix.label}</span><span class="macro-ind-val">${fmt(ind.vix.value)}</span></div>` : ''}
+        ${ind.treasury_10y ? `<div class="macro-ind"><span class="macro-ind-label">${ind.treasury_10y.label}</span><span class="macro-ind-val">${fmt(ind.treasury_10y.value)}${ind.treasury_10y.unit}</span></div>` : ''}
+        ${ind.treasury_2y ? `<div class="macro-ind"><span class="macro-ind-label">${ind.treasury_2y.label}</span><span class="macro-ind-val">${fmt(ind.treasury_2y.value)}${ind.treasury_2y.unit}</span></div>` : ''}
+        ${ind.yield_spread ? `<div class="macro-ind"><span class="macro-ind-label">${ind.yield_spread.label}</span><span class="macro-ind-val ${ind.yield_spread.inverted ? 'text-red' : 'text-green'}">${fmt(ind.yield_spread.value)}${ind.yield_spread.unit}${ind.yield_spread.inverted ? ' ⚠️' : ''}</span></div>` : ''}
+        ${ind.unemployment ? `<div class="macro-ind"><span class="macro-ind-label">${ind.unemployment.label}</span><span class="macro-ind-val">${fmt(ind.unemployment.value)}${ind.unemployment.unit}</span></div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/** Alias para compatibilidad con app.js que importa fetchMacroData */
+export { fetchMacroContext as fetchMacroData };
 
 /**
  * Ajusta el risk free rate basado en la tasa FED actual

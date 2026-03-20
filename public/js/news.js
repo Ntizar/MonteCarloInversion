@@ -159,6 +159,40 @@ export async function fetchStockNews(symbol) {
 }
 
 /**
+ * Renderiza la tarjeta de noticias y sentimiento (HTML string)
+ */
+export function renderNewsCard(newsData) {
+  if (!newsData || newsData.count === 0) {
+    return '<p class="context-unavailable">No hay noticias disponibles para este símbolo.</p>';
+  }
+  const si = newsData.sentimentIndex || {};
+  return `
+    <div class="news-card">
+      <div class="news-sentiment-banner" style="border-left: 4px solid ${si.color || '#9A7B2C'}">
+        <span>Sentimiento: <strong style="color:${si.color || '#9A7B2C'}">${si.label || 'NEUTRO'}</strong></span>
+        <span class="news-score">Score ${si.score ?? 50}/100</span>
+      </div>
+      <ul class="news-list">
+        ${newsData.news.slice(0, 8).map(n => `
+          <li class="news-item">
+            <div class="news-item-header">
+              <span class="news-sentiment-dot" style="background:${n.sentiment?.color || '#9A7B2C'}" title="${n.sentiment?.label || ''}"></span>
+              <a class="news-title" href="${n.link || '#'}" target="_blank" rel="noopener noreferrer">${n.title}</a>
+            </div>
+            <div class="news-meta">
+              <span class="news-source">${n.source || 'Yahoo Finance'}</span>
+              ${n.date ? `<span class="news-date">${new Date(n.date).toLocaleDateString('es-ES')}</span>` : ''}
+              <span class="news-sentiment-label" style="color:${n.sentiment?.color || '#9A7B2C'}">${n.sentiment?.label || ''}</span>
+            </div>
+            ${n.description ? `<p class="news-desc">${n.description}</p>` : ''}
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+/**
  * Obtiene noticias del mercado general
  */
 export async function fetchMarketNews() {

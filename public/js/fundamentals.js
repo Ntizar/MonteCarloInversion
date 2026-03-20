@@ -277,6 +277,85 @@ function computeFundamentalSignal(f) {
 }
 
 /**
+ * Renderiza la tarjeta de fundamentales (HTML string)
+ */
+export function renderFundamentalsCard(f) {
+  if (!f || f.unavailable) {
+    return '<p class="context-unavailable">Fundamentales no disponibles para este símbolo.</p>';
+  }
+  const v = f.valuation || {};
+  const p = f.profitability || {};
+  const g = f.growth || {};
+  const h = f.health || {};
+  const d = f.dividends || {};
+  const i = f.info || {};
+  const ac = f.analystConsensus || {};
+  const sig = f.signal || {};
+  const sigColors = { FUERTE: '#10B981', POSITIVO: '#E8C547', NEUTRO: '#9A7B2C', DÉBIL: '#EF4444' };
+  const sigColor = sigColors[sig.label] || '#888';
+  const fv = (val, suffix = '') => (val != null ? `${val}${suffix}` : '—');
+
+  return `
+    <div class="fundamentals-card">
+      <div class="fund-signal-row">
+        <span class="fund-signal-badge" style="background:${sigColor}">${sig.label ?? 'N/A'}</span>
+        <span class="fund-signal-score">Score ${sig.score ?? '—'}</span>
+        <span class="fund-signal-reason">${sig.reason ?? ''}</span>
+      </div>
+      <div class="fund-grid">
+        <div class="fund-section">
+          <h5>Valoración</h5>
+          <div class="fund-row"><span>P/E Trailing</span><strong>${fv(v.trailingPE, 'x')}</strong></div>
+          <div class="fund-row"><span>P/E Forward</span><strong>${fv(v.forwardPE, 'x')}</strong></div>
+          <div class="fund-row"><span>PEG</span><strong>${fv(v.pegRatio)}</strong></div>
+          <div class="fund-row"><span>P/B</span><strong>${fv(v.priceToBook, 'x')}</strong></div>
+          <div class="fund-row"><span>EV/EBITDA</span><strong>${fv(v.evToEbitda, 'x')}</strong></div>
+          <div class="fund-row"><span>Cap. Mercado</span><strong>${fv(v.marketCap)}</strong></div>
+        </div>
+        <div class="fund-section">
+          <h5>Rentabilidad</h5>
+          <div class="fund-row"><span>ROE</span><strong>${fv(p.returnOnEquity, '%')}</strong></div>
+          <div class="fund-row"><span>ROA</span><strong>${fv(p.returnOnAssets, '%')}</strong></div>
+          <div class="fund-row"><span>Margen Neto</span><strong>${fv(p.profitMargins, '%')}</strong></div>
+          <div class="fund-row"><span>Margen Bruto</span><strong>${fv(p.grossMargins, '%')}</strong></div>
+          <div class="fund-row"><span>Margen Op.</span><strong>${fv(p.operatingMargins, '%')}</strong></div>
+          <div class="fund-row"><span>EBITDA</span><strong>${fv(p.ebitda)}</strong></div>
+        </div>
+        <div class="fund-section">
+          <h5>Crecimiento</h5>
+          <div class="fund-row"><span>Crec. BPA</span><strong>${fv(g.earningsGrowth, '%')}</strong></div>
+          <div class="fund-row"><span>Crec. Ingresos</span><strong>${fv(g.revenueGrowth, '%')}</strong></div>
+          <div class="fund-row"><span>BPA Trailing</span><strong>${fv(g.earningsPerShare)}</strong></div>
+          <div class="fund-row"><span>BPA Forward</span><strong>${fv(g.forwardEPS)}</strong></div>
+        </div>
+        <div class="fund-section">
+          <h5>Salud Financiera</h5>
+          <div class="fund-row"><span>Deuda/Equity</span><strong>${fv(h.debtToEquity)}</strong></div>
+          <div class="fund-row"><span>Ratio Corriente</span><strong>${fv(h.currentRatio)}</strong></div>
+          <div class="fund-row"><span>Caja Total</span><strong>${fv(h.totalCash)}</strong></div>
+          <div class="fund-row"><span>Flujo Libre</span><strong>${fv(h.freeCashflow)}</strong></div>
+        </div>
+        <div class="fund-section">
+          <h5>Dividendos &amp; Info</h5>
+          <div class="fund-row"><span>Yield Div.</span><strong>${fv(d.dividendYield, '%')}</strong></div>
+          <div class="fund-row"><span>Beta</span><strong>${fv(i.beta)}</strong></div>
+          <div class="fund-row"><span>Máx 52 sem.</span><strong>${fv(i.fiftyTwoWeekHigh)}</strong></div>
+          <div class="fund-row"><span>Mín 52 sem.</span><strong>${fv(i.fiftyTwoWeekLow)}</strong></div>
+        </div>
+        <div class="fund-section">
+          <h5>Consenso Analistas</h5>
+          <div class="fund-row"><span>Target Precio</span><strong>${fv(ac.targetMeanPrice)}</strong></div>
+          <div class="fund-row"><span>Target Alto</span><strong>${fv(ac.targetHighPrice)}</strong></div>
+          <div class="fund-row"><span>Target Bajo</span><strong>${fv(ac.targetLowPrice)}</strong></div>
+          <div class="fund-row"><span>Recomendación</span><strong>${ac.recommendationKey?.toUpperCase() ?? '—'}</strong></div>
+          <div class="fund-row"><span>Nº Analistas</span><strong>${fv(ac.numberOfAnalystOpinions)}</strong></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Formatea un valor fundamental para mostrar en UI
  */
 export function fmtFundamental(val, suffix = '') {

@@ -16,7 +16,9 @@ import {
   generateSignal,
   rankBacktestModels,
 } from './simulation.js';
+import { mean, std, clamp } from './math-utils.js';
 import { renderUniverseRankingChart, renderPortfolioAllocationChart } from './charts.js';
+import { renderScreenerFilters, renderScreenerRow, applyScreenerFilters, sortScreenerResults, bindScreenerFilterEvents, readScreenerFilters } from './screener.js';
 
 const $ = (selector) => document.querySelector(selector);
 const PREVIEW_LIMIT = 42;
@@ -673,7 +675,11 @@ function renderMarketReport(report) {
       </div>
     </div>
 
-    <div class="glass-card">
+    <div id="screenerPanel">
+      ${renderScreenerFilters()}
+    </div>
+
+    <div class="glass-card" id="screenerRankingCard">
       <h3>Ranking global del universo</h3>
       <p class="section-note">Fase rápida para todo el universo y fase profunda para los finalistas. Los activos profundizados llevan score final; el resto conserva score de filtro.</p>
       ${report.failedSymbols.length > 0 ? `<p class="section-note">Omitidas por datos insuficientes o error de descarga: ${report.failedSymbols.slice(0, 20).join(', ')}${report.failedSymbols.length > 20 ? ` +${report.failedSymbols.length - 20} más` : ''}</p>` : ''}
@@ -720,6 +726,37 @@ function renderMarketReport(report) {
   requestAnimationFrame(() => {
     renderUniverseRankingChart('marketRankingChart', topAssets, DEFAULTS.scannerTopRankingCount);
     renderPortfolioAllocationChart('idealPortfolioChart', portfolio);
+
+    // Conectar screener
+    const screenerPanel = document.getElementById('screenerPanel');
+    if (screenerPanel) {
+      const allItems = report.ranking.map(asset => ({
+        symbol: asset.symbol,
+        name: asset.name,
+        currentPrice: asset.price,
+        signal: asset.recommendation,
+        score: asset.analysisScore,
+        probUp: asset.probUp,
+        expectedReturn: asset.expectedReturnPct,
+        var95: asset.stage === 'deep' ? asset.metrics?.VaR_95 : null,
+        fundamentals: asset.fundamentals || null,
+        currency: getCurrency(asset.symbol),
+      }));
+
+      function applyAndRender() {
+        const filters = readScreenerFilters(screenerPanel);
+        const filtered = applyScreenerFilters(allItems, filters);
+        const sorted = sortScreenerResults(filtered, filters.sortBy, filters.order);
+        const tbody = document.querySelector('#screenerRankingCard tbody');
+        if (tbody) {
+          tbody.innerHTML = sorted.length > 0
+            ? sorted.map((item, idx) => renderScreenerRow({ ...item, rank: idx + 1 }, item.currency || '$')).join('')
+            : '<tr><td colspan="10" style="text-align:center;padding:16px;color:#888">No hay activos que cumplan los filtros seleccionados.</td></tr>';
+        }
+      }
+
+      bindScreenerFilterEvents(screenerPanel, applyAndRender);
+    }
   });
 }
 
@@ -728,18 +765,6 @@ function inferUniverseLabel(symbol) {
   if (symbol in MARKETS['S&P 500'].tickers) return 'S&P 500';
   if (symbol in COMMODITIES) return 'Materias Primas';
   return 'Selección Manual';
-}
-
-function mean(values) {
-  if (!values || values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function std(values) {
-  if (!values || values.length < 2) return 0;
-  const average = mean(values);
-  const variance = values.reduce((sum, value) => sum + ((value - average) ** 2), 0) / (values.length - 1);
-  return Math.sqrt(variance);
 }
 
 function ratio(values, predicate) {
@@ -761,8 +786,4 @@ function computePriceMaxDrawdown(prices) {
     if (drawdown < maxDrawdown) maxDrawdown = drawdown;
   }
   return maxDrawdown;
-}
-
-function clamp(value, minValue, maxValue) {
-  return Math.max(minValue, Math.min(maxValue, value));
 }

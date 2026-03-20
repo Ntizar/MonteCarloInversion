@@ -3,6 +3,8 @@
    Monte Carlo Stock Simulator v3.0
    ═══════════════════════════════════════════════════════════════════ */
 
+import { getCurrency } from './config.js';
+
 // ── CSV Helpers ──────────────────────────────────────────────────
 
 function escapeCSV(value) {
@@ -206,6 +208,7 @@ export function exportMarketRankingCSV(rankingItems, label = 'mercado') {
  */
 export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData) {
   const ts = new Date().toLocaleString('es-ES');
+  const currency = getCurrency(symbol);
 
   // Guard: need at least metrics to generate a useful report
   if (!metrics || Object.keys(metrics).length === 0) {
@@ -235,7 +238,7 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
         : 'color:#92400e;font-weight:bold';
     return [
       r.model || id,
-      `$${m.expectedPrice?.toFixed(2) ?? '?'}`,
+      `${currency}${m.expectedPrice?.toFixed(2) ?? '?'}`,
       `${m.expectedReturnPct >= 0 ? '+' : ''}${m.expectedReturnPct?.toFixed(2) ?? '?'}%`,
       `${((m.probUp || 0) * 100).toFixed(1)}%`,
       `${m.sharpe?.toFixed(3) ?? '?'}`,
@@ -345,14 +348,20 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
   // ── Section 5: Macro context ─────────────────────────────────────
   const macroHTML = macroData ? (() => {
     const macro = macroData;
-    const yc = macro.yieldCurve;
-    const ycSpread = yc ? ((yc.y10 || 0) - (yc.y2 || 0)).toFixed(2) : '—';
-    const ycLabel = yc
-      ? (parseFloat(ycSpread) < 0 ? 'Invertida (riesgo recesión)' : parseFloat(ycSpread) < 0.5 ? 'Plana' : 'Normal')
+    const ind = macro.indicators || {};
+    const fedRate = ind.fed_rate?.value;
+    const inflation = ind.inflation?.value;
+    const vix = ind.vix?.value;
+    const t10y = ind.treasury_10y?.value;
+    const t2y = ind.treasury_2y?.value;
+    const yieldSpread = ind.yield_spread?.value;
+    const invertedCurve = ind.yield_spread?.inverted;
+    const ycLabel = yieldSpread != null
+      ? (invertedCurve ? 'Invertida (riesgo recesión)' : parseFloat(yieldSpread) < 0.5 ? 'Plana' : 'Normal')
       : '—';
-    const macroSig = macro.signal || {};
-    const sigStyle = macroSig.label === 'Alcista' ? 'color:#0a7c3e;font-weight:bold'
-      : macroSig.label === 'Bajista' ? 'color:#b91c1c;font-weight:bold'
+    const macroSig = macro.signal || '';
+    const sigStyle = macroSig === 'FAVORABLE' ? 'color:#0a7c3e;font-weight:bold'
+      : macroSig === 'ADVERSO' ? 'color:#b91c1c;font-weight:bold'
       : 'color:#92400e;font-weight:bold';
     return `
     <section>
@@ -360,19 +369,23 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
       <div class="macro-grid">
         <div class="macro-item">
           <span class="macro-label">Tipo FED</span>
-          <span class="macro-val">${macro.fedRate != null ? macro.fedRate.toFixed(2) + '%' : '—'}</span>
+          <span class="macro-val">${fedRate != null ? parseFloat(fedRate).toFixed(2) + '%' : '—'}</span>
         </div>
         <div class="macro-item">
           <span class="macro-label">Inflación (CPI)</span>
-          <span class="macro-val">${macro.inflation != null ? macro.inflation.toFixed(2) + '%' : '—'}</span>
+          <span class="macro-val">${inflation != null ? parseFloat(inflation).toFixed(2) + '%' : '—'}</span>
         </div>
         <div class="macro-item">
           <span class="macro-label">VIX</span>
-          <span class="macro-val">${macro.vix != null ? macro.vix.toFixed(1) : '—'}</span>
+          <span class="macro-val">${vix != null ? parseFloat(vix).toFixed(1) : '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Bono 10Y</span>
+          <span class="macro-val">${t10y != null ? parseFloat(t10y).toFixed(2) + '%' : '—'}</span>
         </div>
         <div class="macro-item">
           <span class="macro-label">Curva 2s10s</span>
-          <span class="macro-val">${ycSpread !== '—' ? ycSpread + '%' : '—'}</span>
+          <span class="macro-val">${yieldSpread != null ? parseFloat(yieldSpread).toFixed(2) + '%' : '—'}</span>
         </div>
         <div class="macro-item">
           <span class="macro-label">Tipo Curva</span>
@@ -380,9 +393,14 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
         </div>
         <div class="macro-item">
           <span class="macro-label">Señal Macro</span>
-          <span class="macro-val" style="${sigStyle}">${macroSig.label ?? '—'}</span>
+          <span class="macro-val" style="${sigStyle}">${macroSig || '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Score Macro</span>
+          <span class="macro-val">${macro.score ?? '—'}</span>
         </div>
       </div>
+      ${macro.message ? `<p style="margin-top:8px;font-size:10px;color:#555">${macro.message}</p>` : ''}
     </section>
   `;
   })() : '';
@@ -398,7 +416,7 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
         <div><strong>Margen Neto</strong>${fundamentals.profitability?.profitMargins?.toFixed(1) ?? '—'}%</div>
         <div><strong>Crec. BPA</strong>${fundamentals.growth?.earningsGrowth?.toFixed(1) ?? '—'}%</div>
         <div><strong>Deuda/Equity</strong>${fundamentals.health?.debtToEquity?.toFixed(1) ?? '—'}</div>
-        <div><strong>Target Analistas</strong>$${fundamentals.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
+        <div><strong>Target Analistas</strong>${currency}${fundamentals.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
         <div><strong>Recomendación</strong>${fundamentals.analystConsensus?.recommendationKey?.toUpperCase() ?? '—'}</div>
         <div><strong>Cap. Mercado</strong>${fundamentals.valuation?.marketCap ?? '—'}</div>
         <div><strong>Beta</strong>${fundamentals.info?.beta?.toFixed(2) ?? '—'}</div>
