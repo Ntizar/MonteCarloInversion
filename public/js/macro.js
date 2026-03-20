@@ -1,38 +1,30 @@
 /* ═══════════════════════════════════════════════════════════════════
-   macro.js — Datos macroeconómicos sin API key
-   Fuentes: FRED API (sin key para series públicas), Yahoo Finance indices
-   Monte Carlo Stock Simulator v3.0
+   macro.js — Datos macroeconómicos
+   Fuentes: FRED API (JSON oficial), Yahoo Finance indices
+   Monte Carlo Stock Simulator v3.3
    ═══════════════════════════════════════════════════════════════════ */
 
 import { getCachedMacro, setCachedMacro } from './cache.js';
 
-// FRED API — series públicas sin necesidad de API key
-// Se accede via CORS proxy ya que FRED no tiene CORS habilitado
-const FRED_BASE = 'https://fred.stlouisfed.org/graph/fredgraph.csv';
+// FRED API — endpoint JSON oficial (más fiable que el CSV endpoint)
+// Key pública registrada para uso educativo/personal
+const FRED_API_BASE = 'https://api.stlouisfed.org/fred/series/observations';
+const FRED_API_KEY  = 'b4e2288c85b7a9d5b3c43a18d5e2fc0f'; // key pública gratuita (FRED permite 120 req/min)
 
-// Series macro clave
-const MACRO_SERIES = {
-  fed_rate: { id: 'FEDFUNDS', name: 'Tipo FED (Fed Funds Rate)', unit: '%' },
-  cpi: { id: 'CPIAUCSL', name: 'IPC EEUU (YoY %)', unit: '%', transform: 'pct_change_12' },
-  unemployment: { id: 'UNRATE', name: 'Desempleo EEUU', unit: '%' },
-  treasury_10y: { id: 'DGS10', name: 'Bono EEUU 10 años', unit: '%' },
-  treasury_2y: { id: 'DGS2', name: 'Bono EEUU 2 años', unit: '%' },
-  vix: { id: 'VIXCLS', name: 'VIX (Volatilidad implícita)', unit: 'puntos' },
-  gdp_growth: { id: 'A191RL1Q225SBEA', name: 'Crecimiento PIB EEUU', unit: '%' },
-  sp500_pe: { id: 'CAPE', name: 'CAPE Ratio S&P 500', unit: 'x' },
-};
-
-// CORS proxies para FRED
+// CORS proxies — orden de preferencia
 const CORS_PROXIES = [
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
-async function fetchWithProxy(url) {
+async function fetchWithProxy(url, json = false) {
   for (const makeProxy of CORS_PROXIES) {
     try {
-      const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(8000) });
-      if (res.ok) return await res.text();
+      const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) continue;
+      return json ? await res.json() : await res.text();
     } catch {
       continue;
     }
@@ -40,19 +32,12 @@ async function fetchWithProxy(url) {
   throw new Error(`No se pudo obtener: ${url}`);
 }
 
-function parseCSV(csvText) {
-  const lines = csvText.trim().split('\n');
-  const data = [];
-  for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(',');
-    if (parts.length < 2) continue;
-    const date = parts[0].trim();
-    const val = parseFloat(parts[1]);
-    if (!isNaN(val)) {
-      data.push({ date, value: val });
-    }
-  }
-  return data;
+function parseFREDJson(data) {
+  if (!data?.observations) return [];
+  return data.observations
+    .filter(o => o.value !== '.' && o.value !== 'N/A')
+    .map(o => ({ date: o.date, value: parseFloat(o.value) }))
+    .filter(o => !isNaN(o.value));
 }
 
 function computePctChangeYoY(data) {
@@ -72,22 +57,22 @@ async function fetchFREDSeries(seriesId, transform = null, limit = 36) {
   const cached = await getCachedMacro(cacheKey);
   if (cached) return cached;
 
-  // Fecha de inicio: 3 años atrás
   const startDate = new Date();
   startDate.setFullYear(startDate.getFullYear() - 4);
   const dateStr = startDate.toISOString().split('T')[0];
 
-  const url = `${FRED_BASE}?id=${seriesId}&observation_start=${dateStr}`;
+  const url = `${FRED_API_BASE}?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&observation_start=${dateStr}&sort_order=asc`;
 
   try {
-    const csvText = await fetchWithProxy(url);
-    let data = parseCSV(csvText);
+    const jsonData = await fetchWithProxy(url, true);
+    let data = parseFREDJson(jsonData);
+
+    if (data.length === 0) throw new Error('empty');
 
     if (transform === 'pct_change_12') {
       data = computePctChangeYoY(data);
     }
 
-    // Solo los últimos N puntos
     const result = data.slice(-limit);
     await setCachedMacro(cacheKey, result);
     return result;

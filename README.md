@@ -1,4 +1,4 @@
-# Monte Carlo Stock Simulator — v3.2
+# Monte Carlo Stock Simulator — v3.3
 
 Aplicación web completa para simulación Monte Carlo de acciones bursátiles con diseño LiquidGlass. Desplegada en GitHub Pages, sin servidor.
 
@@ -42,21 +42,26 @@ Live: [https://ntizar.github.io/MonteCarloInversion/](https://ntizar.github.io/M
 ```
 MonteCarloInversion/
 ├── public/
-│   ├── index.html                  # Página principal (v3.2: CSP header)
+│   ├── index.html                  # Página principal (v3.3: CSP ampliado)
 │   ├── css/
-│   │   └── styles.css              # Diseño LiquidGlass
+│   │   └── styles.css              # Diseño LiquidGlass + estilos v3.3
 │   └── js/
 │       ├── app.js                  # Controlador principal
 │       ├── api.js                  # Fetch + cache IndexedDB + cadena CORS
 │       ├── cache.js                # IndexedDB con TTL por tipo de dato
-│       ├── macro.js                # FRED API — datos macro + render
-│       ├── fundamentals.js         # Yahoo Finance quoteSummary + render
+│       ├── macro.js                # FRED API JSON — datos macro + render
+│       ├── fundamentals.js         # Yahoo Finance quoteSummary + earnings calendar
 │       ├── news.js                 # Yahoo RSS + análisis de sentimiento
 │       ├── screener.js             # Filtros y ordenación del ranking
 │       ├── exporter.js             # Exportar CSV y PDF
 │       ├── simulation-worker.js    # Web Worker — 5 motores Monte Carlo
 │       ├── simulation.js           # Orquestador de simulación (main thread)
 │       ├── math-utils.js           # Funciones matemáticas compartidas (PRNG, stats)
+│       ├── technicals.js           # RSI, MACD, Bollinger, MA50/200, ATR (local)
+│       ├── options.js              # Put/Call ratio y volatilidad implícita (Yahoo)
+│       ├── reddit.js               # Sentimiento Reddit / WallStreetBets
+│       ├── insiders.js             # Insider trading SEC EDGAR Form 4
+│       ├── correlation.js          # Matriz de correlación entre activos
 │       ├── portfolio.js            # Radar de mercado y portfolio ideal
 │       ├── charts.js               # Renderizado de gráficos (Chart.js)
 │       └── config.js               # Configuración y listas de acciones
@@ -97,8 +102,11 @@ npx serve public
 |--------|-------|----------|
 | Yahoo Finance | Precios históricos, búsqueda, fundamentales | via CORS proxy |
 | Yahoo Finance RSS | Noticias | `feeds.finance.yahoo.com/rss/2.0/headline` |
+| Yahoo Finance Options | Put/Call ratio, IV, open interest | `query1.finance.yahoo.com/v7/finance/options` |
 | FRED (St. Louis Fed) | Macro: tipos, inflación, VIX, curva | `api.stlouisfed.org/fred/series/observations` |
 | Wikipedia | Composición IBEX 35 y S&P 500 | via CORS proxy |
+| Reddit API | Sentimiento WallStreetBets/stocks | `www.reddit.com/r/.../search.json` |
+| SEC EDGAR | Insider trading Form 4 | `efts.sec.gov/LATEST/search-index` |
 
 ---
 
@@ -135,6 +143,18 @@ Son simulaciones basadas en datos históricos y modelos estocásticos.
 ---
 
 ## Changelog
+
+### v3.3 — Análisis técnico, opciones, Reddit, insiders, earnings, correlación
+
+- **Fix FRED API** — Migrado de endpoint CSV a API JSON oficial (`api.stlouisfed.org/fred/series/observations`); añadido 4º proxy CORS. Los datos macro (tipo FED, inflación, VIX, curva de tipos) ahora se cargan correctamente.
+- **Análisis técnico automático** (`technicals.js`) — RSI 14, MACD (12,26,9), Bandas de Bollinger (20,2), MA20/MA50/MA200, Golden/Death Cross, ATR, soporte & resistencia 52 semanas, señal técnica compuesta con score 0-100.
+- **Put/Call ratio & opciones** (`options.js`) — Volumen y open interest de calls/puts, ratio P/C, volatilidad implícita ATM promedio, señal de sentimiento institucional. Fuente: Yahoo Finance options chain.
+- **Sentimiento Reddit** (`reddit.js`) — Menciones del ticker en r/wallstreetbets y r/stocks (últimos 7 días), análisis de sentimiento por post, score global ponderado por upvotes.
+- **Insider trading** (`insiders.js`) — Últimas transacciones Form 4 de la SEC EDGAR (90 días), con porcentajes de propiedad de insiders e instituciones. Enlace directo a SEC EDGAR.
+- **Earnings Calendar** (`fundamentals.js`) — Extracción de `calendarEvents` de Yahoo Finance: fechas de resultados trimestrales (con estimaciones EPS y revenue), fecha ex-dividendo, fecha de pago. Alerta visual si earnings en ≤ 14 días.
+- **Correlación entre activos** (`correlation.js`) — Matriz de correlación de Pearson sobre log-returns de hasta 5 años entre todos los activos analizados en la sesión. Heatmap HTML con código de colores + volatilidad anualizada por activo.
+- **Pestaña Contexto expandida** — 9 secciones: Análisis técnico · Opciones · Macro · Fundamentales · Earnings Calendar · Noticias · Reddit · Insiders · Correlación.
+- **CSP actualizado** — `connect-src` ampliado con `api.stlouisfed.org`, `thingproxy.freeboard.io`, `www.reddit.com`, `efts.sec.gov`, `www.sec.gov`.
 
 ### v3.2 — Fix arquitectura, refactoring y seguridad
 

@@ -16,6 +16,11 @@ import { fetchMacroData, renderMacroPanel, renderMacroContextCard } from './macr
 import { fetchFundamentals, renderFundamentalsCard } from './fundamentals.js';
 import { fetchStockNews as fetchNews, renderNewsCard } from './news.js';
 import { exportSimulationCSV, exportMarketRankingCSV, exportSimulationPDF } from './exporter.js';
+import { computeTechnicals, renderTechnicalsCard } from './technicals.js';
+import { fetchOptionsData, renderOptionsCard } from './options.js';
+import { fetchRedditSentiment, renderRedditCard } from './reddit.js';
+import { fetchInsiderTrading, renderInsidersCard } from './insiders.js';
+import { computeCorrelationMatrix, renderCorrelationCard } from './correlation.js';
 
 // ── Web Worker ───────────────────────────────────────────────────
 let _simWorker = null;
@@ -76,6 +81,12 @@ let currentBacktest = null;
 let currentFundamentals = null;
 let currentNews = null;
 let macroData = null;
+let currentTechnicals = null;
+let currentOptions = null;
+let currentReddit = null;
+let currentInsiders = null;
+// Map symbol → stockData para correlación entre activos analizados
+const analyzedStocks = {};
 
 // ── DOM References ───────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
@@ -416,17 +427,37 @@ async function loadStock(symbol) {
   }
 }
 
-// Load fundamentals + news in background
+// Load fundamentals + news + technicals + options + reddit + insiders in background
 async function loadContextData(symbol) {
+  // Reset new state for new symbol
+  currentTechnicals = null;
+  currentOptions    = null;
+  currentReddit     = null;
+  currentInsiders   = null;
+
   try {
-    const [fund, news] = await Promise.allSettled([
+    // Análisis técnico es sincrónico (usa currentData ya disponible)
+    if (currentData) {
+      currentTechnicals = computeTechnicals(currentData);
+      // Guardar datos para correlación
+      analyzedStocks[symbol] = currentData;
+    }
+
+    const [fund, news, options, reddit, insiders] = await Promise.allSettled([
       fetchFundamentals(symbol),
       fetchNews(symbol),
+      fetchOptionsData(symbol),
+      fetchRedditSentiment(symbol),
+      fetchInsiderTrading(symbol),
     ]);
-    currentFundamentals = fund.status === 'fulfilled' ? fund.value : null;
-    currentNews = news.status === 'fulfilled' ? news.value : null;
 
-    // If context tab is already visible, render it
+    currentFundamentals = fund.status    === 'fulfilled' ? fund.value    : null;
+    currentNews         = news.status    === 'fulfilled' ? news.value    : null;
+    currentOptions      = options.status === 'fulfilled' ? options.value : null;
+    currentReddit       = reddit.status  === 'fulfilled' ? reddit.value  : null;
+    currentInsiders     = insiders.status === 'fulfilled' ? insiders.value : null;
+
+    // If context tab is already visible, re-render
     const activeTab = document.querySelector('.tab-btn.active');
     if (activeTab?.dataset.tab === 'context') {
       renderContextTab();
@@ -1068,7 +1099,7 @@ function renderBacktestTab(backtest, currency) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Context Tab — Macro + Fundamentals + News
+// Context Tab — Macro + Technicals + Options + Fundamentals + News + Reddit + Insiders + Correlation
 // ═══════════════════════════════════════════════════════════════════
 function renderContextTab() {
   const container = $('#contextContent');
@@ -1076,7 +1107,25 @@ function renderContextTab() {
 
   let html = '';
 
-  // Macro section
+  // ── 1. Análisis técnico ─────────────────────────────────────────
+  html += `<div class="context-section glass-card">
+    <h3>📈 Análisis Técnico</h3>
+    <div id="contextTechnicals">
+      ${currentTechnicals ? renderTechnicalsCard(currentTechnicals) : '<p class="context-loading">Cargando análisis técnico...</p>'}
+    </div></div>`;
+
+  // ── 2. Opciones — Put/Call ratio ────────────────────────────────
+  html += `<div class="context-section glass-card">
+    <h3>⚖️ Opciones & Sentimiento Institucional</h3>
+    <div id="contextOptions">`;
+  if (currentOptions !== undefined) {
+    html += renderOptionsCard(currentOptions);
+  } else {
+    html += `<p class="context-loading">Cargando datos de opciones...</p>`;
+  }
+  html += `</div></div>`;
+
+  // ── 3. Macro ────────────────────────────────────────────────────
   html += `<div class="context-section glass-card">
     <h3>🌍 Contexto Macroeconómico</h3>
     <div id="contextMacroPanel">`;
@@ -1084,21 +1133,18 @@ function renderContextTab() {
     html += renderMacroContextCard(macroData);
   } else {
     html += `<p class="context-loading">Cargando datos macro...</p>`;
-    // Trigger load if not yet done
-    if (!macroData) {
-      fetchMacroData().then(data => {
-        macroData = data;
-        const el = document.getElementById('contextMacroPanel');
-        if (el) el.innerHTML = renderMacroContextCard(data);
-      }).catch(() => {
-        const el = document.getElementById('contextMacroPanel');
-        if (el) el.innerHTML = '<p class="context-unavailable">Datos macro no disponibles</p>';
-      });
-    }
+    fetchMacroData().then(data => {
+      macroData = data;
+      const el = document.getElementById('contextMacroPanel');
+      if (el) el.innerHTML = renderMacroContextCard(data);
+    }).catch(() => {
+      const el = document.getElementById('contextMacroPanel');
+      if (el) el.innerHTML = '<p class="context-unavailable">Datos macro no disponibles</p>';
+    });
   }
   html += `</div></div>`;
 
-  // Fundamentals section
+  // ── 4. Fundamentales ────────────────────────────────────────────
   html += `<div class="context-section glass-card">
     <h3>📋 Fundamentales</h3>
     <div id="contextFundamentals">`;
@@ -1119,7 +1165,15 @@ function renderContextTab() {
   }
   html += `</div></div>`;
 
-  // News section
+  // ── 5. Earnings Calendar ────────────────────────────────────────
+  const cal = currentFundamentals?.calendar;
+  html += `<div class="context-section glass-card">
+    <h3>📅 Calendario: Earnings & Dividendos</h3>
+    <div id="contextEarnings">
+      ${renderEarningsCalendar(cal, currentFundamentals)}
+    </div></div>`;
+
+  // ── 6. Noticias ──────────────────────────────────────────────────
   html += `<div class="context-section glass-card">
     <h3>📰 Noticias & Sentimiento</h3>
     <div id="contextNews">`;
@@ -1140,7 +1194,98 @@ function renderContextTab() {
   }
   html += `</div></div>`;
 
+  // ── 7. Reddit / WallStreetBets ───────────────────────────────────
+  html += `<div class="context-section glass-card">
+    <h3>🗣️ Sentimiento Reddit</h3>
+    <div id="contextReddit">
+      ${currentReddit !== undefined ? renderRedditCard(currentReddit) : '<p class="context-loading">Cargando menciones en Reddit...</p>'}
+    </div></div>`;
+
+  // ── 8. Insider Trading ───────────────────────────────────────────
+  html += `<div class="context-section glass-card">
+    <h3>🏛️ Insider Trading (SEC Form 4)</h3>
+    <div id="contextInsiders">
+      ${currentInsiders !== undefined ? renderInsidersCard(currentInsiders, currentFundamentals) : '<p class="context-loading">Cargando datos de insiders...</p>'}
+    </div></div>`;
+
+  // ── 9. Correlación entre activos analizados ──────────────────────
+  const corrData = Object.keys(analyzedStocks).length >= 2
+    ? computeCorrelationMatrix(analyzedStocks)
+    : null;
+  html += `<div class="context-section glass-card">
+    <h3>🔗 Correlación entre Activos</h3>
+    <div id="contextCorrelation">
+      ${renderCorrelationCard(corrData)}
+    </div></div>`;
+
   container.innerHTML = html;
+}
+
+/** Renderiza el calendario de earnings y dividendos */
+function renderEarningsCalendar(cal, fundamentals) {
+  if (!cal && !fundamentals) return '<p class="context-loading">Cargando calendario...</p>';
+  if (!cal || (cal.earningsDates.length === 0 && !cal.exDividendDate && !cal.dividendDate)) {
+    return '<p class="context-unavailable">Sin eventos de calendario próximos</p>';
+  }
+
+  const today = new Date();
+  const daysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return Math.round((d - today) / 86400000);
+  };
+
+  let html = '<div class="earnings-calendar">';
+
+  // Earnings dates
+  if (cal.earningsDates.length > 0) {
+    cal.earningsDates.forEach(dateStr => {
+      const days = daysUntil(dateStr);
+      const urgency = days !== null && days >= 0 && days <= 14 ? 'earnings-urgent' : '';
+      const daysLabel = days !== null
+        ? (days < 0 ? `(hace ${Math.abs(days)}d)` : days === 0 ? '(HOY)' : `(en ${days}d)`)
+        : '';
+      html += `<div class="earnings-event ${urgency}">
+        <span class="earnings-icon">📊</span>
+        <div class="earnings-info">
+          <span class="earnings-label">Resultados Trimestrales</span>
+          <span class="earnings-date">${dateStr} <strong>${daysLabel}</strong></span>
+          ${cal.earningsAvg ? `<span class="earnings-est">EPS estimado: ${cal.earningsAvg} (rango ${cal.earningsLow}–${cal.earningsHigh})</span>` : ''}
+          ${cal.revenueAvg ? `<span class="earnings-est">Revenue estimado: ${cal.revenueAvg}</span>` : ''}
+        </div>
+      </div>`;
+    });
+  }
+
+  // Ex-dividendo
+  if (cal.exDividendDate) {
+    const days = daysUntil(cal.exDividendDate);
+    const daysLabel = days !== null ? (days < 0 ? `(hace ${Math.abs(days)}d)` : `(en ${days}d)`) : '';
+    html += `<div class="earnings-event">
+      <span class="earnings-icon">💰</span>
+      <div class="earnings-info">
+        <span class="earnings-label">Fecha Ex-Dividendo</span>
+        <span class="earnings-date">${cal.exDividendDate} <strong>${daysLabel}</strong></span>
+        ${fundamentals?.dividends?.dividendRate ? `<span class="earnings-est">Dividendo: ${fundamentals.dividends.dividendRate} (yield ${fundamentals.dividends.dividendYield}%)</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Fecha de pago
+  if (cal.dividendDate) {
+    const days = daysUntil(cal.dividendDate);
+    const daysLabel = days !== null ? (days < 0 ? `(hace ${Math.abs(days)}d)` : `(en ${days}d)`) : '';
+    html += `<div class="earnings-event">
+      <span class="earnings-icon">🏦</span>
+      <div class="earnings-info">
+        <span class="earnings-label">Fecha de Pago Dividendo</span>
+        <span class="earnings-date">${cal.dividendDate} <strong>${daysLabel}</strong></span>
+      </div>
+    </div>`;
+  }
+
+  html += '</div>';
+  return html;
 }
 
 // ═══════════════════════════════════════════════════════════════════

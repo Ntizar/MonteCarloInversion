@@ -2475,3 +2475,285 @@ main {
   .filter-group { min-width: calc(50% - 4px); }
   .context-section { padding: 14px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3.3 — Nuevas tarjetas: Técnicos, Opciones, Reddit, Insiders,
+           Earnings Calendar, Correlación
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Análisis Técnico ─────────────────────────────────────────── */
+.tech-card { display: flex; flex-direction: column; gap: 16px; }
+
+.tech-signal-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.tech-signal-badge {
+  padding: 4px 14px; border-radius: 20px; font-size: 13px;
+  font-weight: 700; letter-spacing: 0.5px; color: #000;
+}
+.tech-signal-score {
+  font-size: 13px; color: var(--text-secondary);
+}
+.tech-badge {
+  padding: 3px 10px; border-radius: 12px; font-size: 11px;
+  font-weight: 600; color: #fff;
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.tech-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.tech-section h4 {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  color: var(--gold); text-transform: uppercase; margin: 0 0 10px;
+}
+.tech-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+}
+.tech-row:last-child { border-bottom: none; }
+.tech-row span:last-child { font-weight: 600; color: var(--text-primary); }
+
+.tech-bar-wrap {
+  height: 6px; background: rgba(255,255,255,0.08);
+  border-radius: 3px; overflow: hidden; margin: 6px 0;
+}
+.tech-bar {
+  height: 100%; border-radius: 3px; transition: width 0.4s ease;
+}
+
+/* ── Opciones Put/Call ────────────────────────────────────────── */
+.options-card { display: flex; flex-direction: column; gap: 14px; }
+
+.options-signal-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.options-sentiment-badge {
+  padding: 4px 14px; border-radius: 20px; font-size: 13px;
+  font-weight: 700; color: #000;
+}
+.options-meta { font-size: 12px; color: var(--text-tertiary); }
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.options-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px; padding: 12px;
+}
+.options-section h4 {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  color: var(--gold); text-transform: uppercase; margin: 0 0 10px;
+}
+.options-row {
+  display: flex; justify-content: space-between;
+  font-size: 12px; padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+}
+.options-row:last-child { border-bottom: none; }
+.options-row.calls span:last-child { color: #10B981; font-weight: 600; }
+.options-row.puts  span:last-child { color: #EF4444; font-weight: 600; }
+.options-row.total span:last-child { color: var(--gold); font-weight: 700; }
+.options-row span:last-child { font-weight: 600; color: var(--text-primary); }
+
+.options-bar-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+.options-bar-label { font-size: 11px; font-weight: 700; min-width: 36px; }
+.options-bar-label.calls { color: #10B981; }
+.options-bar-label.puts  { color: #EF4444; text-align: right; }
+.options-bar-track {
+  flex: 1; height: 8px; display: flex;
+  border-radius: 4px; overflow: hidden;
+}
+.options-bar-fill { height: 100%; transition: width 0.4s; }
+.options-note { font-size: 11px; color: var(--text-tertiary); margin: 0; }
+
+/* ── Reddit Sentimiento ───────────────────────────────────────── */
+.reddit-card { display: flex; flex-direction: column; gap: 14px; }
+
+.reddit-overall-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.reddit-badge {
+  padding: 4px 14px; border-radius: 20px; font-size: 13px;
+  font-weight: 700; color: #000;
+}
+.reddit-score { font-size: 13px; color: var(--text-secondary); }
+.reddit-mentions { font-size: 12px; color: var(--text-tertiary); }
+
+.reddit-posts-list { display: flex; flex-direction: column; gap: 8px; }
+
+.reddit-post {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px; padding: 10px 12px;
+  transition: border-color 0.2s;
+}
+.reddit-post:hover { border-color: var(--glass-border-hover); }
+
+.reddit-post-header {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px;
+}
+.reddit-sentiment-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 4px;
+}
+.reddit-post-title {
+  font-size: 13px; color: var(--text-primary);
+  text-decoration: none; line-height: 1.4;
+}
+.reddit-post-title:hover { color: var(--gold); }
+
+.reddit-post-meta {
+  display: flex; gap: 12px; font-size: 11px;
+  color: var(--text-tertiary); flex-wrap: wrap;
+}
+.reddit-sentiment-label { font-weight: 600; }
+
+/* ── Insider Trading ──────────────────────────────────────────── */
+.insiders-card { display: flex; flex-direction: column; gap: 14px; }
+
+.insiders-ownership {
+  display: flex; gap: 24px; flex-wrap: wrap;
+}
+.insiders-own-item {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.own-val { font-size: 18px; font-weight: 700; color: var(--gold); }
+
+.insiders-table { display: flex; flex-direction: column; gap: 2px; }
+.insiders-header {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 12px; padding: 6px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--gold); text-transform: uppercase;
+  border-bottom: 1px solid var(--glass-border);
+}
+.insiders-row {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 12px; padding: 7px 10px;
+  font-size: 12px; color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.insiders-row:hover { background: rgba(255,255,255,0.03); }
+.insiders-name { color: var(--text-primary); font-weight: 500; }
+.insiders-date small { color: var(--text-tertiary); }
+.insiders-form { color: var(--gold-dark); font-size: 11px; }
+
+.insiders-sec-link {
+  font-size: 12px; color: var(--gold);
+  text-decoration: none; padding: 6px 0;
+  align-self: flex-start;
+}
+.insiders-sec-link:hover { text-decoration: underline; }
+
+/* ── Earnings Calendar ────────────────────────────────────────── */
+.earnings-calendar { display: flex; flex-direction: column; gap: 10px; }
+
+.earnings-event {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.earnings-event.earnings-urgent {
+  border-color: rgba(232, 197, 71, 0.5);
+  background: rgba(232, 197, 71, 0.06);
+}
+.earnings-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+.earnings-info { display: flex; flex-direction: column; gap: 3px; }
+.earnings-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--gold); text-transform: uppercase;
+}
+.earnings-date {
+  font-size: 14px; color: var(--text-primary);
+}
+.earnings-date strong { color: var(--gold-bright); }
+.earnings-est { font-size: 12px; color: var(--text-secondary); }
+
+/* ── Correlación ──────────────────────────────────────────────── */
+.corr-card { display: flex; flex-direction: column; gap: 16px; }
+
+.corr-legend {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.corr-legend-item {
+  padding: 3px 10px; border-radius: 12px;
+  font-size: 11px; color: #aaa; border: 1px solid rgba(255,255,255,0.1);
+}
+
+.corr-table-wrap { overflow-x: auto; }
+.corr-table {
+  border-collapse: collapse; font-size: 12px;
+  min-width: 100%;
+}
+.corr-table th, .corr-table td {
+  padding: 6px 10px; text-align: center;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.corr-table th { color: var(--gold); font-weight: 700; background: rgba(0,0,0,0.3); }
+.corr-sym { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.corr-summary-table {
+  border-collapse: collapse; font-size: 12px; width: 100%;
+}
+.corr-summary-table th {
+  text-align: left; padding: 6px 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+  color: var(--gold); text-transform: uppercase;
+  border-bottom: 1px solid var(--glass-border);
+}
+.corr-summary-table td {
+  padding: 6px 10px; color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.corr-note { font-size: 11px; color: var(--text-tertiary); margin: 0; }
+
+/* ── Macro context card ───────────────────────────────────────── */
+.macro-context-card { display: flex; flex-direction: column; gap: 12px; }
+.macro-signal-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.macro-signal-badge {
+  padding: 4px 14px; border-radius: 20px;
+  font-size: 13px; font-weight: 700; color: #000;
+}
+.macro-signal-score { font-size: 13px; color: var(--text-secondary); }
+.macro-signal-msg   { font-size: 12px; color: var(--text-tertiary); flex: 1; min-width: 200px; }
+.macro-indicators-grid {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.macro-ind {
+  display: flex; flex-direction: column; gap: 3px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px; padding: 10px 14px; min-width: 110px;
+}
+.macro-ind-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.6px; }
+.macro-ind-val   { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.text-red   { color: #EF4444 !important; }
+.text-green { color: #10B981 !important; }
+
+@media (max-width: 640px) {
+  .tech-grid { grid-template-columns: 1fr 1fr; }
+  .options-grid { grid-template-columns: 1fr; }
+  .insiders-header, .insiders-row { grid-template-columns: 1fr auto; }
+  .insiders-form { display: none; }
+}

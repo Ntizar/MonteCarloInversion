@@ -80,6 +80,7 @@ export async function fetchFundamentals(symbol) {
     const fd = data.financialData || {};
     const ks = data.defaultKeyStatistics || {};
     const et = data.earningsTrend || {};
+    const ce = data.calendarEvents || {};
 
     const fundamentals = {
       symbol,
@@ -165,6 +166,23 @@ export async function fetchFundamentals(symbol) {
         numberOfAnalystOpinions: safeFmt(fd.numberOfAnalystOpinions),
         recommendationMean: safeFmt(fd.recommendationMean),
         recommendationKey: fd.recommendationKey || null,
+      },
+
+      // Calendario de earnings y dividendos
+      calendar: {
+        earningsDates: (() => {
+          const dates = ce.earnings?.earningsDate;
+          if (!Array.isArray(dates) || dates.length === 0) return [];
+          return dates
+            .map(d => d?.raw ? new Date(d.raw * 1000).toISOString().split('T')[0] : d?.fmt || null)
+            .filter(Boolean);
+        })(),
+        earningsAvg:  ce.earnings?.earningsAverage?.fmt || null,
+        earningsLow:  ce.earnings?.earningsLow?.fmt || null,
+        earningsHigh: ce.earnings?.earningsHigh?.fmt || null,
+        revenueAvg:   ce.earnings?.revenueAverage?.fmt || null,
+        exDividendDate: ce.exDividendDate?.fmt || sd.exDividendDate?.fmt || null,
+        dividendDate:   ce.dividendDate?.fmt || null,
       },
     };
 
