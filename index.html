@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net blob: worker-src; worker-src 'self' blob:; connect-src 'self' https://api.allorigins.win https://corsproxy.io https://api.codetabs.com https://thingproxy.freeboard.io https://query1.finance.yahoo.com https://query2.finance.yahoo.com https://feeds.finance.yahoo.com https://fred.stlouisfed.org https://api.stlouisfed.org https://en.wikipedia.org https://www.reddit.com https://efts.sec.gov https://www.sec.gov; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monte Carlo Stock Simulator — Black & Gold</title>
+  <meta name="description" content="Advanced Monte Carlo stock simulator with 5 stochastic algorithms. Analyze any stock worldwide with GBM, Heston, Jump-Diffusion, GARCH and Bootstrap models.">
+  <meta name="theme-color" content="#050503">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ═══ Navigation ═══ -->
+  <nav class="nav">
+    <div class="nav-brand" id="logoBtn">
+      <span class="logo">💰</span>
+      <span class="brand-text">Monte Carlo Pro</span>
+    </div>
+    <div class="search-wrapper">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" id="searchInput" class="search-input"
+             placeholder="Buscar cualquier acción (AAPL, MSFT, SAN.MC...)"
+             autocomplete="off" spellcheck="false">
+      <div id="searchDropdown" class="search-dropdown glass-card"></div>
+    </div>
+    <button id="portfolioNavBtn" class="btn-secondary nav-cta">⚡ Radar de Mercado</button>
+  </nav>
+
+  <main>
+    <!-- ═══════════════════════════════════════════════════════════
+         HOME VIEW
+         ═══════════════════════════════════════════════════════════ -->
+    <section id="homeView">
+      <!-- Hero -->
+      <div class="hero">
+        <div class="hero-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+        </div>
+        <h1>Monte Carlo<br><span class="gradient-text">Stock Simulator</span></h1>
+        <p class="hero-subtitle">
+          Simulación estocástica avanzada con 5 algoritmos · Cualquier acción del mundo ·
+          GBM · Heston · Jump-Diffusion · GARCH · Bootstrap
+        </p>
+        <div class="hero-actions">
+          <button id="methodologyBtn" class="btn-secondary">📚 Ver Metodología y Algoritmos</button>
+          <button id="portfolioToolBtn" class="btn-secondary">⚡ Abrir Herramienta Definitiva</button>
+        </div>
+      </div>
+
+      <!-- Macro Panel -->
+      <div class="macro-panel-home markets-container" id="macroPanelHome">
+        <!-- Populated by app.js → loadMacroPanel() -->
+      </div>
+
+      <!-- Markets -->
+      <div class="markets-container" id="marketsContainer"></div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PORTFOLIO VIEW
+         ═══════════════════════════════════════════════════════════ -->
+    <section id="portfolioView" class="analysis-view hidden">
+      <div class="stock-header glass-card portfolio-header">
+        <button id="portfolioBackBtn" class="btn-back">← Volver</button>
+        <div class="stock-info">
+          <h2>Radar de Mercado &amp; Portfolio Ideal</h2>
+          <span class="ticker-badge">Informe final de mercado a fecha actual</span>
+        </div>
+        <div class="price-display portfolio-header-meta">
+          <div class="current-price">Multi-activo</div>
+          <div class="price-change">Ranking global + portfolio sugerido</div>
+        </div>
+      </div>
+
+      <div class="portfolio-layout">
+        <aside class="glass-card portfolio-sidebar">
+          <h3>Herramienta Definitiva</h3>
+          <p class="portfolio-sidebar-copy">
+            Carga universos completos, añade tus tickers manuales y genera un informe final con ranking de acciones y propuesta de portfolio ideal para hoy.
+          </p>
+
+          <div class="control-group">
+            <label>Universos completos</label>
+            <div id="portfolioUniverseButtons" class="universe-selector"></div>
+          </div>
+
+          <div class="control-group">
+            <label for="manualSymbolsInput">Tickers manuales</label>
+            <textarea id="manualSymbolsInput" class="control-textarea" placeholder="AAPL, SAN.MC, GC=F, MSFT..."></textarea>
+            <div class="portfolio-inline-actions">
+              <button id="addManualSymbolsBtn" class="btn-secondary">+ Añadir tickers</button>
+              <button id="clearPortfolioSymbolsBtn" class="btn-secondary">Limpiar selección</button>
+            </div>
+          </div>
+
+          <div class="controls-grid portfolio-params">
+            <div class="control-group">
+              <label for="portfolioSizeInput">Nº Posiciones</label>
+              <input type="number" id="portfolioSizeInput" class="control-input" value="8" min="3" max="20" step="1">
+              <span class="control-hint">Tamaño objetivo del portfolio sugerido</span>
+            </div>
+            <div class="control-group">
+              <label for="portfolioMaxWeightInput">Peso máximo por posición</label>
+              <input type="number" id="portfolioMaxWeightInput" class="control-input" value="22" min="5" max="50" step="1">
+              <span class="control-hint">Controla la concentración máxima por activo</span>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Activos seleccionados</label>
+            <div id="selectedSymbolsSummary" class="selected-summary">0 activos</div>
+            <div id="selectedSymbolsList" class="selected-symbols-list"></div>
+          </div>
+
+          <div class="portfolio-inline-actions portfolio-run-actions">
+            <button id="runMarketRankingBtn" class="btn-secondary">📊 Generar Ranking</button>
+            <button id="runIdealPortfolioBtn" class="btn-primary">⚡ Generar Portfolio Ideal</button>
+          </div>
+        </aside>
+
+        <div class="portfolio-main">
+          <div id="marketReportIntro" class="glass-card portfolio-intro-card">
+            <h3>Informe final de mercado</h3>
+            <p>
+              El escáner analiza el universo seleccionado en dos fases: primero ordena todas las acciones con métricas de mercado, y después profundiza en las candidatas finales con Monte Carlo y validación histórica.
+            </p>
+            <p>
+              Con eso devuelve un ranking usable y una propuesta de portfolio ideal para la fecha actual.
+            </p>
+          </div>
+          <div id="marketReportContent"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         ANALYSIS VIEW
+         ═══════════════════════════════════════════════════════════ -->
+    <section id="analysisView" class="analysis-view hidden">
+
+      <!-- Stock Header -->
+      <div class="stock-header glass-card">
+        <button id="backBtn" class="btn-back">← Volver</button>
+        <div class="stock-info">
+          <h2 id="stockName">—</h2>
+          <span id="stockTicker" class="ticker-badge">—</span>
+        </div>
+        <div class="price-display">
+          <div id="currentPrice" class="current-price">—</div>
+          <div id="priceChange" class="price-change">—</div>
+        </div>
+        <button id="pdfHeaderBtn" class="btn-export hidden" title="Descargar informe PDF completo">&#11015; PDF</button>
+      </div>
+
+      <!-- Historical Chart -->
+      <div class="historical-section glass-card">
+        <h3>📈 Precio Histórico (5 años)</h3>
+        <div class="chart-container"><canvas id="historicalChart"></canvas></div>
+      </div>
+
+      <!-- Simulation Controls -->
+      <div class="controls-section glass-card">
+        <div class="controls-grid">
+          <div class="control-group">
+            <label for="horizonInput">Horizonte (días hábiles)</label>
+            <input type="number" id="horizonInput" class="control-input" value="252" min="5" max="504" step="1">
+            <span class="control-hint">21=1 mes · 63=trimestre · 126=6 meses · 252=1 año</span>
+          </div>
+          <div class="control-group">
+            <label for="simInput">Nº Simulaciones</label>
+            <input type="number" id="simInput" class="control-input" value="3000" min="100" max="50000" step="100">
+            <span class="control-hint">Más simulaciones = mayor precisión (recomendado ≥3000)</span>
+          </div>
+          <div class="control-group">
+            <label>Modelos</label>
+            <div class="models-checkboxes">
+              <label class="model-check">
+                <input type="checkbox" class="model-checkbox" value="gbm" checked>
+                <span class="model-dot" style="background:#F0D060"></span>GBM
+              </label>
+              <label class="model-check">
+                <input type="checkbox" class="model-checkbox" value="heston" checked>
+                <span class="model-dot" style="background:#D4A843"></span>Heston
+              </label>
+              <label class="model-check">
+                <input type="checkbox" class="model-checkbox" value="jump" checked>
+                <span class="model-dot" style="background:#E8C547"></span>Jump-Diff
+              </label>
+              <label class="model-check">
+                <input type="checkbox" class="model-checkbox" value="garch" checked>
+                <span class="model-dot" style="background:#C49B38"></span>GARCH
+              </label>
+              <label class="model-check">
+                <input type="checkbox" class="model-checkbox" value="bootstrap" checked>
+                <span class="model-dot" style="background:#9A7B2C"></span>Bootstrap
+              </label>
+            </div>
+          </div>
+          <div class="control-group" style="justify-content:end">
+            <button id="runBtn" class="btn-primary">▶ Ejecutar Simulaciones</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Results (hidden until simulation runs) ═══ -->
+      <div id="resultsSection" class="hidden">
+
+        <!-- Tabs Navigation -->
+        <div class="tabs-nav">
+          <button class="tab-btn active" data-tab="overview">📊 Resumen</button>
+          <button class="tab-btn" data-tab="simulations">🔮 Simulaciones</button>
+          <button class="tab-btn" data-tab="risk">⚠️ Riesgo</button>
+          <button class="tab-btn" data-tab="compare">⚖️ Comparar Modelos</button>
+          <button class="tab-btn" data-tab="backtest">🧪 Validación Histórica</button>
+          <button class="tab-btn" data-tab="context">🌍 Contexto</button>
+          <button class="tab-btn" data-tab="methodology">📚 Metodología</button>
+        </div>
+
+        <!-- Tab: Overview -->
+        <div id="tab-overview" class="tab-panel active">
+          <div id="overviewContent"></div>
+        </div>
+
+        <!-- Tab: Simulations -->
+        <div id="tab-simulations" class="tab-panel">
+          <div id="simulationsContent"></div>
+        </div>
+
+        <!-- Tab: Risk -->
+        <div id="tab-risk" class="tab-panel">
+          <div id="riskContent"></div>
+        </div>
+
+        <!-- Tab: Compare -->
+        <div id="tab-compare" class="tab-panel">
+          <div id="compareContent"></div>
+        </div>
+
+        <!-- Tab: Historical Backtest -->
+        <div id="tab-backtest" class="tab-panel">
+          <div id="backtestContent"></div>
+        </div>
+
+        <!-- Tab: Context (Macro + Fundamentals + News) -->
+        <div id="tab-context" class="tab-panel">
+          <div id="contextContent"></div>
+        </div>
+
+        <!-- Tab: Methodology -->
+        <div id="tab-methodology" class="tab-panel">
+          <div id="methodologyContent"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Methodology Modal -->
+  <div id="methodologyModal" class="modal-overlay">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h2>📚 Metodología y Algoritmos</h2>
+        <button id="closeModalBtn" class="btn-close">✕</button>
+      </div>
+      <div class="modal-body" id="modalMethodologyContent"></div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>Monte Carlo Stock Simulator v3.0 · Simulación estocástica avanzada · Datos en tiempo real de Yahoo Finance · Macro de FRED</p>
+    <p style="margin-top:4px">Los resultados no constituyen asesoramiento financiero. Úselo bajo su propia responsabilidad.</p>
+    <div class="footer-credits">
+      <p>Desarrollado por <strong>David Antizar</strong></p>
+      <p class="footer-tech">5 algoritmos Monte Carlo · GBM · Heston · Jump-Diffusion · GARCH(1,1) · Bootstrap · IndexedDB cache · Web Workers · FRED macro · Fundamentales · Noticias</p>
+    </div>
+  </footer>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <!-- App -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
