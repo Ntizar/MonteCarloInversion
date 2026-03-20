@@ -1,39 +1,10 @@
-# Monte Carlo Stock Simulator — v3.1
+# Monte Carlo Stock Simulator — v3.2
 
 Aplicación web completa para simulación Monte Carlo de acciones bursátiles con diseño LiquidGlass. Desplegada en GitHub Pages, sin servidor.
 
 **Desarrollado por David Antizar**
 
 Live: [https://ntizar.github.io/MonteCarloInversion/](https://ntizar.github.io/MonteCarloInversion/)
-
----
-
-## Changelog
-
-### v3.1 — PDF export completo + fix deploy
-- **Botón PDF en cabecera de acción** — Aparece solo tras ejecutar la simulación, empujado al extremo derecho del header.
-- **Informe PDF completo** — Abre una ventana imprimible con 8 secciones:
-  1. Señal y resumen por modelo (precio esperado, retorno, P(subida), Sharpe, Sortino, señal, score)
-  2. Métricas de riesgo expandidas (VaR/CVaR al 95% y 99%, MDD, P(−10%), P(−20%), vol 30d y anual)
-  3. Validación histórica (score, acierto direccional, error medio/mediano, cobertura IC95%, checkpoints)
-  4. Explicación de los 5 modelos (ecuación, caso de uso ideal, limitación)
-  5. Contexto macro (tipo FED, inflación, VIX, curva 2s10s, señal macro)
-  6. Fundamentales
-  7. Noticias y sentimiento (hasta 8 noticias)
-  8. Aviso legal
-- **Fix bug crítico** — Las dos llamadas a `exportSimulationPDF()` pasaban solo el símbolo; ahora pasan los 7 parámetros de estado.
-- **Fix deploy** — GitHub Actions workflow que publica `public/` en rama `gh-pages` automáticamente en cada push a `main`.
-
-### v3.0 — Arquitectura completa
-- **Web Workers** — Las simulaciones Monte Carlo se ejecutan en un hilo secundario; la UI nunca se bloquea.
-- **Cache IndexedDB** — Datos de precio, macro y fundamentales se cachean con TTL por tipo; no se recargan en cada visita.
-- **Datos macro (FRED API)** — Tipo de interés FED, inflación PCE, VIX, curva de tipos, spread crediticio. Sin API key.
-- **Fundamentales (Yahoo Finance)** — P/E, P/B, EPS, márgenes, deuda, dividendo y más, via CORS proxy.
-- **Noticias y sentimiento** — Feed RSS de Yahoo Finance con análisis de sentimiento por titular.
-- **Screener** — Filtros por señal, Sharpe, VaR, retorno esperado y ordenación dinámica sobre el ranking del radar.
-- **Exportar CSV** — Descarga el ranking del mercado en un click.
-- **Tab Contexto** — Nueva pestaña por acción que integra macro, fundamentales y noticias en una sola vista.
-- **Cadena de proxies CORS robusta** — allorigins.win → corsproxy.io → codetabs.com con detección automática de entorno GitHub Pages.
 
 ---
 
@@ -71,11 +42,11 @@ Live: [https://ntizar.github.io/MonteCarloInversion/](https://ntizar.github.io/M
 ```
 MonteCarloInversion/
 ├── public/
-│   ├── index.html                  # Página principal (v3.0: tab Contexto, panel macro)
+│   ├── index.html                  # Página principal (v3.2: CSP header)
 │   ├── css/
-│   │   └── styles.css              # Diseño LiquidGlass + estilos v3.0
+│   │   └── styles.css              # Diseño LiquidGlass
 │   └── js/
-│       ├── app.js                  # Controlador principal (v3.0: imports macro/fund/news/export)
+│       ├── app.js                  # Controlador principal
 │       ├── api.js                  # Fetch + cache IndexedDB + cadena CORS
 │       ├── cache.js                # IndexedDB con TTL por tipo de dato
 │       ├── macro.js                # FRED API — datos macro + render
@@ -85,6 +56,7 @@ MonteCarloInversion/
 │       ├── exporter.js             # Exportar CSV y PDF
 │       ├── simulation-worker.js    # Web Worker — 5 motores Monte Carlo
 │       ├── simulation.js           # Orquestador de simulación (main thread)
+│       ├── math-utils.js           # Funciones matemáticas compartidas (PRNG, stats)
 │       ├── portfolio.js            # Radar de mercado y portfolio ideal
 │       ├── charts.js               # Renderizado de gráficos (Chart.js)
 │       └── config.js               # Configuración y listas de acciones
@@ -159,3 +131,45 @@ Rolling backtest automático a 1 año:
 Los resultados de esta herramienta **no constituyen asesoramiento financiero**.
 Son simulaciones basadas en datos históricos y modelos estocásticos.
 Úselos únicamente con fines educativos y de investigación.
+
+---
+
+## Changelog
+
+### v3.2 — Fix arquitectura, refactoring y seguridad
+
+- **Fix import mismatches** — `fetchStockNews`, `renderMacroPanel`, `renderMacroContextCard`, `renderFundamentalsCard`, `renderNewsCard` ahora exportados e importados correctamente; la app ya no fallaba silenciosamente al arrancar.
+- **Web Worker conectado** — Las simulaciones Monte Carlo y el backtest histórico se ejecutan realmente en `simulation-worker.js` vía `new Worker()`; el main thread nunca se bloquea.
+- **Screener integrado** — `screener.js` conectado al informe de mercado en `portfolio.js`; los filtros por señal, Sharpe, VaR y retorno esperado ya funcionan sobre el ranking.
+- **`math-utils.js` creado** — Funciones PRNG, estadísticas y utilidades matemáticas centralizadas; eliminada la duplicación entre `simulation.js`, `simulation-worker.js` y `portfolio.js`.
+- **Moneda dinámica en PDF** — `exporter.js` detecta la moneda real del activo via `getCurrency()`; ya no aparece `$` para acciones europeas o japonesas.
+- **Fix estructura datos macro** — `exporter.js` accede correctamente a `macro.indicators.*`; eliminados accesos incorrectos a `macro.fedRate`, `macro.inflation`, etc.
+- **Content Security Policy** — Añadida cabecera CSP en `index.html` restringiendo `script-src`, `worker-src`, `connect-src`, `font-src`, `style-src` e `img-src`.
+- **Fix FRED API** — Parámetro `vintage_date=` corregido a `observation_start=` en `macro.js`.
+
+### v3.1 — PDF export completo + fix deploy
+
+- **Botón PDF en cabecera de acción** — Aparece solo tras ejecutar la simulación, empujado al extremo derecho del header.
+- **Informe PDF completo** — Abre una ventana imprimible con 8 secciones:
+  1. Señal y resumen por modelo (precio esperado, retorno, P(subida), Sharpe, Sortino, señal, score)
+  2. Métricas de riesgo expandidas (VaR/CVaR al 95% y 99%, MDD, P(−10%), P(−20%), vol 30d y anual)
+  3. Validación histórica (score, acierto direccional, error medio/mediano, cobertura IC95%, checkpoints)
+  4. Explicación de los 5 modelos (ecuación, caso de uso ideal, limitación)
+  5. Contexto macro (tipo FED, inflación, VIX, curva 2s10s, señal macro)
+  6. Fundamentales
+  7. Noticias y sentimiento (hasta 8 noticias)
+  8. Aviso legal
+- **Fix bug crítico** — Las dos llamadas a `exportSimulationPDF()` pasaban solo el símbolo; ahora pasan los 7 parámetros de estado.
+- **Fix deploy** — GitHub Actions workflow que publica `public/` en rama `gh-pages` automáticamente en cada push a `main`.
+
+### v3.0 — Arquitectura completa
+
+- **Web Workers** — Las simulaciones Monte Carlo se ejecutan en un hilo secundario; la UI nunca se bloquea.
+- **Cache IndexedDB** — Datos de precio, macro y fundamentales se cachean con TTL por tipo; no se recargan en cada visita.
+- **Datos macro (FRED API)** — Tipo de interés FED, inflación PCE, VIX, curva de tipos, spread crediticio. Sin API key.
+- **Fundamentales (Yahoo Finance)** — P/E, P/B, EPS, márgenes, deuda, dividendo y más, via CORS proxy.
+- **Noticias y sentimiento** — Feed RSS de Yahoo Finance con análisis de sentimiento por titular.
+- **Screener** — Filtros por señal, Sharpe, VaR, retorno esperado y ordenación dinámica sobre el ranking del radar.
+- **Exportar CSV** — Descarga el ranking del mercado en un click.
+- **Tab Contexto** — Nueva pestaña por acción que integra macro, fundamentales y noticias en una sola vista.
+- **Cadena de proxies CORS robusta** — allorigins.win → corsproxy.io → codetabs.com con detección automática de entorno GitHub Pages.
