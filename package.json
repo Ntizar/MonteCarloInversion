@@ -1,0 +1,17 @@
+{
+  "name": "monte-carlo-stock-simulator",
+  "version": "2.0.0",
+  "description": "Advanced Monte Carlo Stock Simulator — 5 algorithms, any stock worldwide",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'Static site, no build needed'"
+  },
+  "dependencies": {
+    "@netlify/functions": "^2.4.0",
+    "yahoo-finance2": "^3.13.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
