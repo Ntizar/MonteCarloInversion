@@ -2757,3 +2757,60 @@ main {
   .insiders-header, .insiders-row { grid-template-columns: 1fr auto; }
   .insiders-form { display: none; }
 }
+
+/* ── Ranking Pagination ───────────────────────────────────────────── */
+.ranking-pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 4px 4px;
+  flex-wrap: wrap;
+}
+.page-btn {
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  color: var(--text-primary, #e5e5e5);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  min-width: 32px;
+}
+.page-btn:hover:not([disabled]) {
+  background: var(--gold, #c9a227);
+  color: #000;
+  border-color: var(--gold, #c9a227);
+}
+.page-btn.active {
+  background: var(--gold, #c9a227);
+  color: #000;
+  border-color: var(--gold, #c9a227);
+  font-weight: 700;
+}
+.page-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.page-info {
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  margin-right: 8px;
+}
+.page-ellipsis {
+  font-size: 13px;
+  color: var(--text-secondary, #aaa);
+  padding: 0 4px;
+}
+
+/* ── Context tab interpretive paragraphs ─────────────────────────── */
+.context-interp {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, #ccc);
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--gold, #c9a227);
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 12px;
+}

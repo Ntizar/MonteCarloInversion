@@ -720,6 +720,7 @@ function renderMarketReport(report) {
           </tbody>
         </table>
       </div>
+      <div class="ranking-pagination"></div>
     </div>
   `;
 
@@ -743,16 +744,59 @@ function renderMarketReport(report) {
         currency: getCurrency(asset.symbol),
       }));
 
+      const PAGE_SIZE = 25;
+      let currentPage = 1;
+
+      function renderPage(sorted) {
+        const tbody = document.querySelector('#screenerRankingCard tbody');
+        const paginationEl = document.querySelector('#screenerRankingCard .ranking-pagination');
+        if (!tbody) return;
+
+        const total = sorted.length;
+        const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        currentPage = Math.min(currentPage, totalPages);
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pageItems = sorted.slice(start, start + PAGE_SIZE);
+
+        tbody.innerHTML = pageItems.length > 0
+          ? pageItems.map((item, idx) => renderScreenerRow({ ...item, rank: start + idx + 1 }, item.currency || '$')).join('')
+          : '<tr><td colspan="10" style="text-align:center;padding:16px;color:#888">No hay activos que cumplan los filtros seleccionados.</td></tr>';
+
+        // Render pagination
+        if (paginationEl) {
+          if (totalPages <= 1) {
+            paginationEl.innerHTML = '';
+          } else {
+            const pages = [];
+            pages.push(`<span class="page-info">${start + 1}–${Math.min(start + PAGE_SIZE, total)} de ${total}</span>`);
+            pages.push(`<button class="page-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>&#8249;</button>`);
+            for (let p = 1; p <= totalPages; p++) {
+              if (p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1) {
+                pages.push(`<button class="page-btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`);
+              } else if (Math.abs(p - currentPage) === 2) {
+                pages.push(`<span class="page-ellipsis">…</span>`);
+              }
+            }
+            pages.push(`<button class="page-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>&#8250;</button>`);
+            paginationEl.innerHTML = pages.join('');
+            paginationEl.querySelectorAll('.page-btn:not([disabled])').forEach(btn => {
+              btn.addEventListener('click', () => {
+                currentPage = parseInt(btn.dataset.page);
+                renderPage(_lastSorted);
+              });
+            });
+          }
+        }
+      }
+
+      let _lastSorted = [];
+
       function applyAndRender() {
         const filters = readScreenerFilters(screenerPanel);
         const filtered = applyScreenerFilters(allItems, filters);
-        const sorted = sortScreenerResults(filtered, filters.sortBy, filters.order);
-        const tbody = document.querySelector('#screenerRankingCard tbody');
-        if (tbody) {
-          tbody.innerHTML = sorted.length > 0
-            ? sorted.map((item, idx) => renderScreenerRow({ ...item, rank: idx + 1 }, item.currency || '$')).join('')
-            : '<tr><td colspan="10" style="text-align:center;padding:16px;color:#888">No hay activos que cumplan los filtros seleccionados.</td></tr>';
-        }
+        _lastSorted = sortScreenerResults(filtered, filters.sortBy, filters.order);
+        currentPage = 1;
+        renderPage(_lastSorted);
       }
 
       bindScreenerFilterEvents(screenerPanel, applyAndRender);

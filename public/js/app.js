@@ -85,6 +85,10 @@ let currentTechnicals = null;
 let currentOptions = null;
 let currentReddit = null;
 let currentInsiders = null;
+// Flags que indican si ya terminó la carga asíncrona de cada módulo
+let _optionsLoaded = false;
+let _redditLoaded  = false;
+let _insidersLoaded = false;
 // Map symbol → stockData para correlación entre activos analizados
 const analyzedStocks = {};
 
@@ -323,7 +327,7 @@ function setupNavigation() {
     }
   });
   $('#exportPdfBtn')?.addEventListener('click', () => {
-    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
+    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders, currentReddit);
   });
 }
 
@@ -429,11 +433,16 @@ async function loadStock(symbol) {
 
 // Load fundamentals + news + technicals + options + reddit + insiders in background
 async function loadContextData(symbol) {
-  // Reset new state for new symbol
-  currentTechnicals = null;
-  currentOptions    = null;
-  currentReddit     = null;
-  currentInsiders   = null;
+  // Reset state for new symbol
+  currentTechnicals  = null;
+  currentOptions     = null;
+  currentReddit      = null;
+  currentInsiders    = null;
+  currentFundamentals = null;
+  currentNews        = null;
+  _optionsLoaded  = false;
+  _redditLoaded   = false;
+  _insidersLoaded = false;
 
   try {
     // Análisis técnico es sincrónico (usa currentData ya disponible)
@@ -451,18 +460,26 @@ async function loadContextData(symbol) {
       fetchInsiderTrading(symbol),
     ]);
 
-    currentFundamentals = fund.status    === 'fulfilled' ? fund.value    : null;
-    currentNews         = news.status    === 'fulfilled' ? news.value    : null;
-    currentOptions      = options.status === 'fulfilled' ? options.value : null;
-    currentReddit       = reddit.status  === 'fulfilled' ? reddit.value  : null;
+    currentFundamentals = fund.status     === 'fulfilled' ? fund.value     : null;
+    currentNews         = news.status     === 'fulfilled' ? news.value     : null;
+    currentOptions      = options.status  === 'fulfilled' ? options.value  : null;
+    currentReddit       = reddit.status   === 'fulfilled' ? reddit.value   : null;
     currentInsiders     = insiders.status === 'fulfilled' ? insiders.value : null;
 
-    // If context tab is already visible, re-render
+    _optionsLoaded  = true;
+    _redditLoaded   = true;
+    _insidersLoaded = true;
+
+    // If context tab is already visible, re-render with complete data
     const activeTab = document.querySelector('.tab-btn.active');
     if (activeTab?.dataset.tab === 'context') {
       renderContextTab();
     }
-  } catch (_) { /* silently ignore */ }
+  } catch (_) {
+    _optionsLoaded  = true;
+    _redditLoaded   = true;
+    _insidersLoaded = true;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -550,7 +567,7 @@ async function runSimulation() {
       const fresh = pdfHeaderBtn.cloneNode(true);
       pdfHeaderBtn.parentNode.replaceChild(fresh, pdfHeaderBtn);
       fresh.addEventListener('click', () => {
-        exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
+        exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders, currentReddit);
       });
     }
 
@@ -718,7 +735,7 @@ function renderOverviewTab(results, metrics, currency, s0, backtest) {
     exportSimulationCSV(currentSymbol, currentResults, currentMetrics);
   });
   document.getElementById('exportPdfBtn')?.addEventListener('click', () => {
-    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders);
+    exportSimulationPDF(currentSymbol, currentResults, currentMetrics, currentBacktest, currentFundamentals, currentNews, macroData, currentTechnicals, currentOptions, currentInsiders, currentReddit);
   });
 }
 
@@ -1105,34 +1122,63 @@ function renderContextTab() {
   const container = $('#contextContent');
   if (!container) return;
 
+  const sym = currentSymbol || '—';
+
   let html = '';
 
   // ── 1. Análisis técnico ─────────────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>📈 Análisis Técnico</h3>
-    <div id="contextTechnicals">
-      ${currentTechnicals ? renderTechnicalsCard(currentTechnicals) : '<p class="context-loading">Cargando análisis técnico...</p>'}
-    </div></div>`;
+    <h3>📈 Análisis Técnico</h3>`;
+  if (currentTechnicals) {
+    // Interpretación del score técnico para el activo concreto
+    const t = currentTechnicals;
+    const interp = t.score >= 70
+      ? `Los indicadores técnicos de <strong>${sym}</strong> apuntan a un <strong>sesgo alcista</strong> claro (score ${t.score}/100). La tendencia principal es <em>${t.trend}</em> con ${t.bullPoints} puntos alcistas frente a ${t.bearPoints} bajistas.`
+      : t.score <= 35
+        ? `El cuadro técnico de <strong>${sym}</strong> refleja <strong>debilidad</strong> (score ${t.score}/100). Tendencia <em>${t.trend}</em> — predominan ${t.bearPoints} señales bajistas frente a ${t.bullPoints} alcistas.`
+        : `Los indicadores técnicos de <strong>${sym}</strong> muestran una situación <strong>mixta o neutral</strong> (score ${t.score}/100). Tendencia <em>${t.trend}</em> con ${t.bullPoints} puntos alcistas y ${t.bearPoints} bajistas.`;
+    html += `<p class="context-interp">${interp}</p>`;
+    html += renderTechnicalsCard(t);
+  } else {
+    html += `<p class="context-loading">Calculando análisis técnico de ${sym}...</p>`;
+  }
+  html += `</div>`;
 
   // ── 2. Opciones — Put/Call ratio ────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>⚖️ Opciones & Sentimiento Institucional</h3>
-    <div id="contextOptions">`;
-  if (currentOptions !== undefined) {
-    html += renderOptionsCard(currentOptions);
+    <h3>⚖️ Opciones & Sentimiento Institucional</h3>`;
+  if (!_optionsLoaded) {
+    html += `<p class="context-loading">Cargando datos de opciones de ${sym}...</p>`;
+  } else if (currentOptions && !currentOptions.unavailable) {
+    const o = currentOptions;
+    const interp = o.pcRatioVol != null
+      ? (o.pcRatioVol < 0.7
+          ? `El mercado de opciones de <strong>${sym}</strong> muestra un sesgo <strong>alcista</strong>: más calls que puts (P/C Vol ${o.pcRatioVol.toFixed(2)}). Los participantes institucionales apuestan mayoritariamente al alza.`
+          : o.pcRatioVol > 1.2
+            ? `El mercado de opciones refleja <strong>cautela o cobertura bajista</strong> en <strong>${sym}</strong> (P/C Vol ${o.pcRatioVol.toFixed(2)}). El predominio de puts puede indicar expectativas de caída o cobertura de carteras largas.`
+            : `El mercado de opciones de <strong>${sym}</strong> está <strong>equilibrado</strong> (P/C Vol ${o.pcRatioVol.toFixed(2)}), sin sesgo direccional claro entre alcistas y bajistas.`)
+      : `Datos de opciones obtenidos para <strong>${sym}</strong>.`;
+    html += `<p class="context-interp">${interp}</p>`;
+    html += renderOptionsCard(o);
   } else {
-    html += `<p class="context-loading">Cargando datos de opciones...</p>`;
+    html += renderOptionsCard(null);
   }
-  html += `</div></div>`;
+  html += `</div>`;
 
   // ── 3. Macro ────────────────────────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>🌍 Contexto Macroeconómico</h3>
-    <div id="contextMacroPanel">`;
+    <h3>🌍 Contexto Macroeconómico</h3>`;
   if (macroData) {
-    html += renderMacroContextCard(macroData);
+    const m = macroData;
+    const interp = m.score >= 60
+      ? `El entorno macro es <strong>favorable</strong> para activos de riesgo como <strong>${sym}</strong> (score ${m.score}/100). Los indicadores apuntan a condiciones de crédito y liquidez positivas.`
+      : m.score <= 35
+        ? `El entorno macro plantea <strong>vientos de cara</strong> para <strong>${sym}</strong> (score ${m.score}/100). Tipos altos, inflación persistente o curva invertida pueden presionar las valoraciones.`
+        : `El contexto macro para <strong>${sym}</strong> es <strong>neutro a mixto</strong> (score ${m.score}/100). Conviene vigilar la evolución de tipos e inflación como factores clave.`;
+    html += `<p class="context-interp">${interp}</p>`;
+    html += `<div id="contextMacroPanel">${renderMacroContextCard(m)}</div>`;
   } else {
-    html += `<p class="context-loading">Cargando datos macro...</p>`;
+    html += `<div id="contextMacroPanel"><p class="context-loading">Cargando datos macro...</p></div>`;
     fetchMacroData().then(data => {
       macroData = data;
       const el = document.getElementById('contextMacroPanel');
@@ -1142,28 +1188,36 @@ function renderContextTab() {
       if (el) el.innerHTML = '<p class="context-unavailable">Datos macro no disponibles</p>';
     });
   }
-  html += `</div></div>`;
+  html += `</div>`;
 
   // ── 4. Fundamentales ────────────────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>📋 Fundamentales</h3>
-    <div id="contextFundamentals">`;
-  if (currentFundamentals) {
-    html += renderFundamentalsCard(currentFundamentals);
+    <h3>📋 Fundamentales</h3>`;
+  if (currentFundamentals && !currentFundamentals.unavailable) {
+    const f = currentFundamentals;
+    const pe = f.valuation?.trailingPE;
+    const roe = f.profitability?.returnOnEquity;
+    const rec = f.analystConsensus?.recommendationKey?.toUpperCase();
+    const targetMean = f.analystConsensus?.targetMeanPrice;
+    const currentPrice = currentData?.currentPrice;
+    const upsideStr = (targetMean && currentPrice && currentPrice > 0)
+      ? ` El precio objetivo medio de analistas implica un <strong>${((targetMean / currentPrice - 1) * 100).toFixed(1)}%</strong> de ${targetMean > currentPrice ? 'potencial alcista' : 'recorte'}.`
+      : '';
+    const peStr = pe != null
+      ? (pe < 15 ? `P/E de ${pe.toFixed(1)}x, por debajo de la media histórica del mercado — potencialmente infravalorado o sector defensivo.`
+         : pe > 35 ? `P/E de ${pe.toFixed(1)}x — valoración exigente que requiere crecimiento robusto para justificarse.`
+         : `P/E de ${pe.toFixed(1)}x en rango normal.`)
+      : '';
+    const roeStr = roe != null ? ` ROE del ${roe.toFixed(1)}% — ${roe > 15 ? 'alta rentabilidad sobre el capital' : roe > 8 ? 'rentabilidad moderada' : 'rentabilidad reducida'}.` : '';
+    html += `<p class="context-interp"><strong>${sym}</strong>: ${peStr}${roeStr}${upsideStr} ${rec ? `Consenso analistas: <strong>${rec}</strong>.` : ''}</p>`;
+    html += renderFundamentalsCard(f);
+  } else if (currentFundamentals === null && !_optionsLoaded) {
+    // Aún cargando (aprovechamos _optionsLoaded como proxy de "carga terminada")
+    html += `<p class="context-loading">Cargando fundamentales de ${sym}...</p>`;
   } else {
-    html += `<p class="context-loading">Cargando fundamentales de ${currentSymbol}...</p>`;
-    if (currentSymbol) {
-      fetchFundamentals(currentSymbol).then(data => {
-        currentFundamentals = data;
-        const el = document.getElementById('contextFundamentals');
-        if (el) el.innerHTML = renderFundamentalsCard(data);
-      }).catch(() => {
-        const el = document.getElementById('contextFundamentals');
-        if (el) el.innerHTML = '<p class="context-unavailable">Fundamentales no disponibles</p>';
-      });
-    }
+    html += `<p class="context-unavailable">Fundamentales no disponibles para ${sym}</p>`;
   }
-  html += `</div></div>`;
+  html += `</div>`;
 
   // ── 5. Earnings Calendar ────────────────────────────────────────
   const cal = currentFundamentals?.calendar;
@@ -1175,48 +1229,73 @@ function renderContextTab() {
 
   // ── 6. Noticias ──────────────────────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>📰 Noticias & Sentimiento</h3>
-    <div id="contextNews">`;
+    <h3>📰 Noticias & Sentimiento</h3>`;
   if (currentNews) {
-    html += renderNewsCard(currentNews);
-  } else {
-    html += `<p class="context-loading">Cargando noticias de ${currentSymbol}...</p>`;
-    if (currentSymbol) {
-      fetchNews(currentSymbol).then(data => {
-        currentNews = data;
-        const el = document.getElementById('contextNews');
-        if (el) el.innerHTML = renderNewsCard(data);
-      }).catch(() => {
-        const el = document.getElementById('contextNews');
-        if (el) el.innerHTML = '<p class="context-unavailable">Noticias no disponibles</p>';
-      });
+    const si = currentNews.sentimentIndex;
+    if (si) {
+      const interp = si.score > 0.2
+        ? `El sentimiento de las noticias recientes sobre <strong>${sym}</strong> es <strong>positivo</strong> (score ${si.score?.toFixed(2)}). El flujo de noticias puede actuar como catalizador alcista a corto plazo.`
+        : si.score < -0.2
+          ? `El flujo informativo reciente sobre <strong>${sym}</strong> tiene un tono <strong>negativo</strong> (score ${si.score?.toFixed(2)}). Evalúa si los titulares reflejan un riesgo fundamental o una sobrereacción puntual.`
+          : `El sentimiento informativo de <strong>${sym}</strong> es <strong>neutral</strong> (score ${si.score?.toFixed(2)}). Sin catalizadores de noticias destacados en este momento.`;
+      html += `<p class="context-interp">${interp}</p>`;
     }
+    html += renderNewsCard(currentNews);
+  } else if (!_optionsLoaded) {
+    html += `<p class="context-loading">Cargando noticias de ${sym}...</p>`;
+  } else {
+    html += `<p class="context-unavailable">Noticias no disponibles para ${sym}</p>`;
   }
-  html += `</div></div>`;
+  html += `</div>`;
 
   // ── 7. Reddit / WallStreetBets ───────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>🗣️ Sentimiento Reddit</h3>
-    <div id="contextReddit">
-      ${currentReddit !== undefined ? renderRedditCard(currentReddit) : '<p class="context-loading">Cargando menciones en Reddit...</p>'}
-    </div></div>`;
+    <h3>🗣️ Sentimiento Reddit</h3>`;
+  if (!_redditLoaded) {
+    html += `<p class="context-loading">Cargando menciones en Reddit de ${sym}...</p>`;
+  } else if (currentReddit && currentReddit.mentions > 0) {
+    const r = currentReddit;
+    const s = r.overallSentiment;
+    const interp = s?.label === 'Muy Positivo' || s?.label === 'Positivo'
+      ? `<strong>${sym}</strong> tiene <strong>alta presencia y sentimiento favorable</strong> en Reddit (${r.mentions} menciones). La comunidad retail muestra entusiasmo — puede amplificar movimientos al alza, pero también introduce volatilidad especulativa.`
+      : s?.label === 'Negativo' || s?.label === 'Muy Negativo'
+        ? `El sentimiento de la comunidad retail en Reddit hacia <strong>${sym}</strong> es <strong>negativo</strong> (${r.mentions} menciones). Esto puede anticipar presión vendedora o simplemente reflejar el contexto de mercado reciente.`
+        : `<strong>${sym}</strong> tiene presencia en Reddit con ${r.mentions} menciones. El sentimiento general es <strong>${s?.label ?? 'neutro'}</strong> — sin momentum especulativo destacado.`;
+    html += `<p class="context-interp">${interp}</p>`;
+    html += renderRedditCard(r);
+  } else {
+    html += renderRedditCard(currentReddit);
+  }
+  html += `</div>`;
 
   // ── 8. Insider Trading ───────────────────────────────────────────
   html += `<div class="context-section glass-card">
-    <h3>🏛️ Insider Trading (SEC Form 4)</h3>
-    <div id="contextInsiders">
-      ${currentInsiders !== undefined ? renderInsidersCard(currentInsiders, currentFundamentals) : '<p class="context-loading">Cargando datos de insiders...</p>'}
-    </div></div>`;
+    <h3>🏛️ Insider Trading (SEC Form 4)</h3>`;
+  if (!_insidersLoaded) {
+    html += `<p class="context-loading">Cargando datos de insiders de ${sym}...</p>`;
+  } else if (currentInsiders && currentInsiders.count > 0) {
+    const interp = `Se han detectado <strong>${currentInsiders.count} filing(s) Form 4</strong> recientes en SEC EDGAR para <strong>${sym}</strong>. Las compras de insiders suelen interpretarse como señal de confianza interna; las ventas masivas pueden indicar toma de beneficios o necesidades de liquidez.`;
+    html += `<p class="context-interp">${interp}</p>`;
+    html += renderInsidersCard(currentInsiders, currentFundamentals);
+  } else {
+    html += renderInsidersCard(currentInsiders, currentFundamentals);
+  }
+  html += `</div>`;
 
   // ── 9. Correlación entre activos analizados ──────────────────────
   const corrData = Object.keys(analyzedStocks).length >= 2
     ? computeCorrelationMatrix(analyzedStocks)
     : null;
   html += `<div class="context-section glass-card">
-    <h3>🔗 Correlación entre Activos</h3>
-    <div id="contextCorrelation">
-      ${renderCorrelationCard(corrData)}
-    </div></div>`;
+    <h3>🔗 Correlación entre Activos</h3>`;
+  if (Object.keys(analyzedStocks).length < 2) {
+    html += `<p class="context-unavailable">Analiza al menos 2 activos para ver la matriz de correlación. La correlación mide si los activos se mueven en la misma dirección — útil para diversificar una cartera.</p>`;
+  } else {
+    const nStocks = Object.keys(analyzedStocks).length;
+    html += `<p class="context-interp">Correlación de retornos diarios entre los <strong>${nStocks} activos</strong> analizados en esta sesión. Valores cercanos a +1 indican movimiento conjunto (baja diversificación); cercanos a −1, movimiento opuesto (buena cobertura); cercanos a 0, independencia.</p>`;
+    html += renderCorrelationCard(corrData);
+  }
+  html += `</div>`;
 
   container.innerHTML = html;
 }

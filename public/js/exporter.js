@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    exporter.js — Exportación PDF (vía window.print) y CSV
-   Monte Carlo Stock Simulator v3.4
+   Monte Carlo Stock Simulator v3.5
    ═══════════════════════════════════════════════════════════════════ */
 
 import { getCurrency } from './config.js';
@@ -208,8 +208,9 @@ export function exportMarketRankingCSV(rankingItems, label = 'mercado') {
  * @param {object} technicals   — computed technicals object (may be null)
  * @param {object} optionsData  — options Put/Call data (may be null)
  * @param {object} insiders     — insider trading data (may be null)
+ * @param {object} redditData   — Reddit sentiment data (may be null)
  */
-export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData, technicals, optionsData, insiders) {
+export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData, technicals, optionsData, insiders, redditData) {
   const ts = new Date().toLocaleString('es-ES');
   const currency = getCurrency(symbol);
 
@@ -369,6 +370,14 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
     return `
     <section>
       <h2>Contexto Macro</h2>
+      <p style="font-size:10px;color:#333;margin-bottom:8px">
+        ${macroSig === 'FAVORABLE'
+          ? `El entorno macroeconómico es <strong style="color:#0a7c3e">favorable</strong> para activos de riesgo (score ${macro.score ?? '—'}/100). Tipos y volatilidad en niveles que históricamente sostienen las valoraciones bursátiles.`
+          : macroSig === 'ADVERSO'
+            ? `El entorno macro es <strong style="color:#b91c1c">adverso</strong> para activos de riesgo (score ${macro.score ?? '—'}/100). ${invertedCurve ? 'La curva de tipos invertida es una señal recesiva clásica. ' : ''}Tipos elevados o VIX alto pueden presionar los múltiplos de valoración de <strong>${symbol}</strong>.`
+            : `El contexto macro es <strong style="color:#92400e">neutro</strong> (score ${macro.score ?? '—'}/100). ${macro.message ?? 'Ni viento de cola ni de cara para la renta variable en este momento.'}`
+        }
+      </p>
       <div class="macro-grid">
         <div class="macro-item">
           <span class="macro-label">Tipo FED</span>
@@ -409,23 +418,47 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
   })() : '';
 
   // ── Section 6: Fundamentals ──────────────────────────────────────
-  const fundHTML = fundamentals && !fundamentals.unavailable ? `
+  const fundHTML = fundamentals && !fundamentals.unavailable ? (() => {
+    const f = fundamentals;
+    const pe = f.valuation?.trailingPE;
+    const roe = f.profitability?.returnOnEquity;
+    const margin = f.profitability?.profitMargins;
+    const rec = f.analystConsensus?.recommendationKey?.toUpperCase();
+    const targetMean = f.analystConsensus?.targetMeanPrice;
+    const peInterp = pe != null
+      ? (pe < 12 ? `P/E ${pe.toFixed(1)}x — valoración baja, posible oportunidad de valor o riesgo estructural pendiente de confirmar.`
+         : pe < 20 ? `P/E ${pe.toFixed(1)}x — rango razonable para una empresa madura.`
+         : pe < 35 ? `P/E ${pe.toFixed(1)}x — valoración de crecimiento; el mercado descuenta expansión de beneficios.`
+         : `P/E ${pe.toFixed(1)}x — valoración muy exigente; cualquier decepcción en resultados puede provocar correcciones severas.`)
+      : '';
+    const roeInterp = roe != null
+      ? ` ROE ${roe.toFixed(1)}% — ${roe > 20 ? 'excelente rentabilidad sobre fondos propios' : roe > 10 ? 'rentabilidad razonable' : 'rentabilidad reducida; puede indicar uso ineficiente del capital'}.`
+      : '';
+    const marginInterp = margin != null
+      ? ` Margen neto ${margin.toFixed(1)}% — ${margin > 20 ? 'márgenes elevados típicos de empresas con foso competitivo' : margin > 5 ? 'márgenes normales del sector' : 'márgenes ajustados que dejan poco margen de error operativo'}.`
+      : '';
+    const upside = targetMean != null
+      ? ` Target analistas: ${currency}${targetMean.toFixed(2)} (${rec ?? '—'}).`
+      : '';
+    return `
     <section>
-      <h2>Fundamentales</h2>
+      <h2>Fundamentales — ${symbol}</h2>
+      <p style="font-size:10px;color:#333;margin-bottom:8px">${peInterp}${roeInterp}${marginInterp}${upside}</p>
       <div class="fund-grid">
-        <div><strong>P/E Trailing</strong>${fundamentals.valuation?.trailingPE?.toFixed(1) ?? '—'}</div>
-        <div><strong>P/E Forward</strong>${fundamentals.valuation?.forwardPE?.toFixed(1) ?? '—'}</div>
-        <div><strong>ROE</strong>${fundamentals.profitability?.returnOnEquity?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Margen Neto</strong>${fundamentals.profitability?.profitMargins?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Crec. BPA</strong>${fundamentals.growth?.earningsGrowth?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Deuda/Equity</strong>${fundamentals.health?.debtToEquity?.toFixed(1) ?? '—'}</div>
-        <div><strong>Target Analistas</strong>${currency}${fundamentals.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
-        <div><strong>Recomendación</strong>${fundamentals.analystConsensus?.recommendationKey?.toUpperCase() ?? '—'}</div>
-        <div><strong>Cap. Mercado</strong>${fundamentals.valuation?.marketCap ?? '—'}</div>
-        <div><strong>Beta</strong>${fundamentals.info?.beta?.toFixed(2) ?? '—'}</div>
+        <div><strong>P/E Trailing</strong>${f.valuation?.trailingPE?.toFixed(1) ?? '—'}</div>
+        <div><strong>P/E Forward</strong>${f.valuation?.forwardPE?.toFixed(1) ?? '—'}</div>
+        <div><strong>ROE</strong>${f.profitability?.returnOnEquity?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Margen Neto</strong>${f.profitability?.profitMargins?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Crec. BPA</strong>${f.growth?.earningsGrowth?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Deuda/Equity</strong>${f.health?.debtToEquity?.toFixed(1) ?? '—'}</div>
+        <div><strong>Target Analistas</strong>${currency}${f.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
+        <div><strong>Recomendación</strong>${f.analystConsensus?.recommendationKey?.toUpperCase() ?? '—'}</div>
+        <div><strong>Cap. Mercado</strong>${f.valuation?.marketCap ?? '—'}</div>
+        <div><strong>Beta</strong>${f.info?.beta?.toFixed(2) ?? '—'}</div>
       </div>
     </section>
-  ` : '';
+  `;
+  })() : '';
 
   // ── Section 7: News / Sentiment ──────────────────────────────────
   const newsHTML = news?.news?.length ? `
@@ -477,7 +510,15 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
 
     return `
     <section>
-      <h2>Análisis Técnico</h2>
+      <h2>Análisis Técnico — ${symbol}</h2>
+      <p style="font-size:10px;color:#333;margin-bottom:8px">
+        ${t.score >= 70
+          ? `El cuadro técnico de <strong>${symbol}</strong> es <strong style="color:#0a7c3e">alcista</strong> (score ${t.score}/100). ${t.goldenCross ? 'MA50 por encima de MA200 (Golden Cross). ' : ''}${t.rsi14 != null && t.rsi14 < 50 ? '' : t.rsi14 != null && t.rsi14 > 70 ? 'RSI en zona de sobrecompra — vigilar posible corrección. ' : ''}Tendencia: <strong>${t.trend}</strong>.`
+          : t.score <= 35
+            ? `El cuadro técnico de <strong>${symbol}</strong> muestra <strong style="color:#b91c1c">debilidad</strong> (score ${t.score}/100). ${!t.goldenCross ? 'MA50 por debajo de MA200 (Death Cross). ' : ''}${t.rsi14 != null && t.rsi14 < 30 ? 'RSI en sobreventa — posible rebote técnico. ' : ''}Tendencia: <strong>${t.trend}</strong>.`
+            : `Técnicos de <strong>${symbol}</strong> en zona <strong style="color:#92400e">neutral</strong> (score ${t.score}/100). No hay señales técnicas dominantes claras. Tendencia: <strong>${t.trend}</strong>.`
+        }
+      </p>
       <div class="tech-pdf-header">
         <span class="tech-pdf-badge" style="background:${t.trendColor ?? '#555'};color:#fff;padding:3px 10px;border-radius:3px;font-weight:bold">${t.trend ?? '—'}</span>
         &nbsp; Score técnico: <strong>${t.score ?? '—'}/100</strong>
@@ -557,7 +598,18 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
       : '';
     return `
     <section>
-      <h2>Opciones — Put/Call Ratio</h2>
+      <h2>Opciones — Put/Call Ratio — ${symbol}</h2>
+      <p style="font-size:10px;color:#333;margin-bottom:8px">
+        ${o.pcRatioVol != null
+          ? (o.pcRatioVol < 0.7
+              ? `P/C Vol ${o.pcRatioVol.toFixed(2)}: <strong style="color:#0a7c3e">sesgo alcista</strong>. El mercado de opciones posiciona más calls que puts — los participantes institucionales apuestan mayoritariamente al alza en <strong>${symbol}</strong>.`
+              : o.pcRatioVol > 1.2
+                ? `P/C Vol ${o.pcRatioVol.toFixed(2)}: <strong style="color:#b91c1c">cobertura bajista o precaución</strong>. El predominio de puts refleja expectativas de caída o cobertura de posiciones largas sobre <strong>${symbol}</strong>.`
+                : `P/C Vol ${o.pcRatioVol.toFixed(2)}: mercado de opciones <strong style="color:#92400e">equilibrado</strong>. Sin sesgo direccional claro en <strong>${symbol}</strong>.`)
+          : `Datos de opciones disponibles para <strong>${symbol}</strong>.`
+        }
+        ${o.impliedVolatility != null ? ` IV implícita ATM: <strong>${o.impliedVolatility}%</strong> — ${parseFloat(o.impliedVolatility) > 40 ? 'volatilidad implícita elevada; las opciones están caras, lo que puede indicar incertidumbre sobre un evento próximo.' : parseFloat(o.impliedVolatility) < 15 ? 'baja volatilidad implícita; mercado complaciente.' : 'volatilidad implícita en rango normal.'}` : ''}
+      </p>
       <div class="options-pdf-header">
         <span style="${sentStyle}">${o.sentiment ?? '—'}</span>
         &nbsp; Próx. vencimiento: <strong>${o.nextExpiration ?? '—'}</strong>
@@ -648,6 +700,51 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
   `;
   })();
 
+  // ── Section 11: Reddit Sentiment ────────────────────────────────
+  const redditHTML = (() => {
+    if (!redditData || (redditData.mentions === 0 && !redditData.posts?.length)) {
+      return '';
+    }
+    const r = redditData;
+    const s = r.overallSentiment;
+    const sentStyle = s?.color
+      ? `color:${s.color};font-weight:bold`
+      : 'font-weight:bold';
+    const interp = s?.label === 'Muy Positivo' || s?.label === 'Positivo'
+      ? `El sentimiento retail en Reddit es <strong style="color:#0a7c3e">${s.label}</strong> para <strong>${symbol}</strong> (${r.mentions} menciones). El entusiasmo de la comunidad puede amplificar movimientos alcistas, aunque también introduce volatilidad especulativa a corto plazo.`
+      : s?.label === 'Negativo' || s?.label === 'Muy Negativo'
+        ? `El sentimiento en Reddit es <strong style="color:#b91c1c">${s.label}</strong> para <strong>${symbol}</strong> (${r.mentions} menciones). La presión vendedora del retail puede exacerbar correcciones; o bien puede ser una señal contraria de capitulación.`
+        : `Sentimiento Reddit <strong style="color:#92400e">${s?.label ?? 'neutral'}</strong> para <strong>${symbol}</strong> con ${r.mentions} menciones. Sin momentum especulativo notable.`;
+
+    const topPosts = (r.posts || []).slice(0, 5);
+    const postRows = topPosts.map(p => `
+      <tr>
+        <td>${p.subreddit ?? '—'}</td>
+        <td>${p.title ? p.title.slice(0, 80) + (p.title.length > 80 ? '…' : '') : '—'}</td>
+        <td style="color:${p.sentiment?.color ?? '#555'}">${p.sentiment?.label ?? '—'}</td>
+        <td>${p.score?.toLocaleString('es-ES') ?? '—'}</td>
+        <td>${p.created ? new Date(p.created * 1000).toLocaleDateString('es-ES') : '—'}</td>
+      </tr>
+    `).join('');
+
+    return `
+    <section>
+      <h2>Sentimiento Reddit — ${symbol}</h2>
+      <p style="font-size:10px;color:#333;margin-bottom:8px">${interp}</p>
+      <div style="display:flex;gap:16px;margin-bottom:10px;font-size:10px">
+        <span>Menciones totales: <strong>${r.mentions}</strong></span>
+        <span>Sentimiento general: <strong style="${sentStyle}">${s?.label ?? '—'}</strong></span>
+        ${s?.score != null ? `<span>Score: <strong>${s.score.toFixed(2)}</strong></span>` : ''}
+      </div>
+      ${topPosts.length > 0 ? `
+      <table>
+        <thead><tr><th>Subreddit</th><th>Título</th><th>Sentimiento</th><th>Votos</th><th>Fecha</th></tr></thead>
+        <tbody>${postRows}</tbody>
+      </table>` : ''}
+    </section>
+  `;
+  })();
+
   // ── Assemble full HTML document ──────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -720,7 +817,7 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
 <body>
 
 <h1>Monte Carlo Stock Simulator — ${symbol}</h1>
-<div class="meta">Informe generado el ${ts} &nbsp;·&nbsp; Monte Carlo Stock Simulator v3.4 &nbsp;·&nbsp; Datos: Yahoo Finance (sin garantía de exactitud)</div>
+<div class="meta">Informe generado el ${ts} &nbsp;·&nbsp; Monte Carlo Stock Simulator v3.5 &nbsp;·&nbsp; Datos: Yahoo Finance (sin garantía de exactitud)</div>
 
 <!-- 1. Signal Summary -->
 <section>
@@ -771,12 +868,15 @@ ${optionsHTML}
 <!-- 10. Insider Trading -->
 ${insidersHTML}
 
-<!-- 11. Disclaimer -->
+<!-- 11. Reddit Sentiment -->
+${redditHTML}
+
+<!-- 12. Disclaimer -->
 <div class="disclaimer">
   <strong>Aviso legal:</strong> Los resultados de este simulador son de naturaleza puramente estadística y se basan en datos históricos.
   No constituyen asesoramiento financiero, de inversión, legal ni fiscal. Las simulaciones de Monte Carlo no garantizan resultados futuros.
   Invierta únicamente el capital que esté dispuesto a perder. Consulte a un asesor financiero certificado antes de tomar decisiones de inversión.
-  Monte Carlo Stock Simulator v3.4 &nbsp;·&nbsp; Datos proporcionados por Yahoo Finance sin garantía de exactitud ni integridad.
+  Monte Carlo Stock Simulator v3.5 &nbsp;·&nbsp; Datos proporcionados por Yahoo Finance sin garantía de exactitud ni integridad.
 </div>
 
 </body>

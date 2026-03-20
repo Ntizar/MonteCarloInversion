@@ -80,23 +80,44 @@ export const MARKETS = {
   'S&P 500': {
     flag: '🇺🇸', currency: '$', index: '^GSPC',
     tickers: {
+      // Tecnología
       'AAPL':'Apple','MSFT':'Microsoft','GOOGL':'Alphabet','AMZN':'Amazon',
       'NVDA':'NVIDIA','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom',
       'ORCL':'Oracle','CRM':'Salesforce','AMD':'AMD','ADBE':'Adobe',
       'INTC':'Intel','CSCO':'Cisco','QCOM':'Qualcomm','IBM':'IBM',
       'NOW':'ServiceNow','INTU':'Intuit','AMAT':'Applied Materials','MU':'Micron',
+      'PANW':'Palo Alto Networks','SNOW':'Snowflake','PLTR':'Palantir','APP':'AppLovin',
+      'FTNT':'Fortinet','KLAC':'KLA Corp','LRCX':'Lam Research','MRVL':'Marvell',
+      // Financieras
       'JPM':'JPMorgan Chase','V':'Visa','MA':'Mastercard','BAC':'Bank of America',
       'WFC':'Wells Fargo','GS':'Goldman Sachs','MS':'Morgan Stanley',
       'BLK':'BlackRock','AXP':'American Express','C':'Citigroup',
+      'SCHW':'Charles Schwab','COF':'Capital One','USB':'U.S. Bancorp',
+      'PGR':'Progressive','CB':'Chubb','MMC':'Marsh & McLennan',
+      // Salud
       'UNH':'UnitedHealth','JNJ':'Johnson & Johnson','LLY':'Eli Lilly',
       'PFE':'Pfizer','ABBV':'AbbVie','MRK':'Merck','TMO':'Thermo Fisher',
       'ABT':'Abbott','DHR':'Danaher','BMY':'Bristol-Myers Squibb',
+      'AMGN':'Amgen','GILD':'Gilead','VRTX':'Vertex','REGN':'Regeneron',
+      'ISRG':'Intuitive Surgical','SYK':'Stryker','ELV':'Elevance',
+      // Consumo discrecional
       'WMT':'Walmart','PG':'Procter & Gamble','KO':'Coca-Cola',
       'PEP':'PepsiCo','COST':'Costco','MCD':"McDonald's",'NKE':'Nike',
-      'SBUX':'Starbucks','HD':'Home Depot','XOM':'ExxonMobil',
-      'CVX':'Chevron','COP':'ConocoPhillips','CAT':'Caterpillar',
-      'BA':'Boeing','HON':'Honeywell','UPS':'UPS','GE':'GE Aerospace',
+      'SBUX':'Starbucks','HD':'Home Depot','LOW':'Lowe\'s',
+      'TGT':'Target','TJX':'TJ Maxx','BKNG':'Booking Holdings',
+      // Energía & Industrial
+      'XOM':'ExxonMobil','CVX':'Chevron','COP':'ConocoPhillips',
+      'CAT':'Caterpillar','BA':'Boeing','HON':'Honeywell','UPS':'UPS',
+      'GE':'GE Aerospace','RTX':'RTX Corp','LMT':'Lockheed Martin',
+      'DE':'John Deere','MMM':'3M','FDX':'FedEx',
+      // Comunicaciones & Media
       'DIS':'Walt Disney','NFLX':'Netflix','CMCSA':'Comcast','T':'AT&T','VZ':'Verizon',
+      'TMUS':'T-Mobile','WBD':'Warner Bros Discovery',
+      // Utilities & REITs
+      'NEE':'NextEra Energy','DUK':'Duke Energy','SO':'Southern Company',
+      'AMT':'American Tower','PLD':'Prologis','EQIX':'Equinix',
+      // Materiales
+      'LIN':'Linde','APD':'Air Products','SHW':'Sherwin-Williams',
     }
   },
   'EURO STOXX': {
