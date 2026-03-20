@@ -193,13 +193,29 @@ export function exportMarketRankingCSV(rankingItems, label = 'mercado') {
 // ── PDF Export (window.print with print stylesheet) ──────────────
 
 /**
- * Genera un informe HTML y abre el diálogo de impresión
- * El informe está diseñado para ser legible en papel (blanco/negro o color)
+ * Genera un informe HTML completo y abre el diálogo de impresión.
+ * El informe está diseñado para ser legible en papel (blanco/negro o color).
+ *
+ * @param {string} symbol
+ * @param {object} results      — map of modelId → simulation result
+ * @param {object} metrics      — map of modelId → computed metrics
+ * @param {object} backtest     — historical backtest object (may be null)
+ * @param {object} fundamentals — fundamentals data (may be null)
+ * @param {object} news         — news + sentiment data (may be null)
+ * @param {object} macroData    — macro context data (may be null)
  */
-export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news) {
+export function exportSimulationPDF(symbol, results, metrics, backtest, fundamentals, news, macroData) {
   const ts = new Date().toLocaleString('es-ES');
+
+  // Guard: need at least metrics to generate a useful report
+  if (!metrics || Object.keys(metrics).length === 0) {
+    alert('Ejecuta la simulación antes de exportar el PDF.');
+    return;
+  }
+
   const modelIds = Object.keys(metrics);
 
+  // ── Utility: build an HTML table ────────────────────────────────
   const table = (headers, rows) => `
     <table>
       <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
@@ -207,67 +223,208 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
     </table>
   `;
 
-  const summaryRows = modelIds.map(id => {
+  // ── Section 1: Signal summary ────────────────────────────────────
+  const signalRows = modelIds.map(id => {
     const m = metrics[id];
     const r = results[id] || {};
     const sig = generateSignalSimple(m);
+    const signalStyle = sig.signal === 'BUY'
+      ? 'color:#0a7c3e;font-weight:bold'
+      : sig.signal === 'SELL'
+        ? 'color:#b91c1c;font-weight:bold'
+        : 'color:#92400e;font-weight:bold';
     return [
       r.model || id,
       `$${m.expectedPrice?.toFixed(2) ?? '?'}`,
       `${m.expectedReturnPct >= 0 ? '+' : ''}${m.expectedReturnPct?.toFixed(2) ?? '?'}%`,
-      `${(m.probUp * 100).toFixed(1)}%`,
-      `${((m.VaR_95 || 0) * 100).toFixed(2)}%`,
-      `${((m.mddMean || 0) * 100).toFixed(2)}%`,
+      `${((m.probUp || 0) * 100).toFixed(1)}%`,
       `${m.sharpe?.toFixed(3) ?? '?'}`,
-      sig.signal,
+      `${m.sortino?.toFixed(3) ?? '?'}`,
+      `<span style="${signalStyle}">${sig.signal}</span>`,
+      sig.score,
     ];
   });
 
+  // ── Section 2: Risk metrics ──────────────────────────────────────
+  const riskRows = modelIds.map(id => {
+    const m = metrics[id];
+    const r = results[id] || {};
+    return [
+      r.model || id,
+      `${((m.VaR_95 || 0) * 100).toFixed(2)}%`,
+      `${((m.CVaR_95 || 0) * 100).toFixed(2)}%`,
+      `${((m.VaR_99 || 0) * 100).toFixed(2)}%`,
+      `${((m.CVaR_99 || 0) * 100).toFixed(2)}%`,
+      `${((m.mddMean || 0) * 100).toFixed(2)}%`,
+      `${((m.probLoss10 || 0) * 100).toFixed(1)}%`,
+      `${((m.probLoss20 || 0) * 100).toFixed(1)}%`,
+      `${((m.vol_30d || 0) * 100).toFixed(1)}%`,
+      `${((m.vol_252d || 0) * 100).toFixed(1)}%`,
+    ];
+  });
+
+  // ── Section 3: Backtest ──────────────────────────────────────────
   const btRows = backtest?.results ? Object.entries(backtest.results).map(([id, bt]) => {
     const s = bt.summary || {};
     return [
       bt.model || id,
       s.score ?? '?',
-      `${(s.directionAccuracy * 100).toFixed(1)}%`,
-      `${s.meanAbsErrorPct?.toFixed(2)}%`,
-      `${(s.within95Rate * 100).toFixed(1)}%`,
+      `${((s.directionAccuracy || 0) * 100).toFixed(1)}%`,
+      `${s.meanAbsErrorPct?.toFixed(2) ?? '?'}%`,
+      `${s.medianAbsErrorPct?.toFixed(2) ?? '?'}%`,
+      `${((s.within95Rate || 0) * 100).toFixed(1)}%`,
+      s.nCheckpoints ?? '?',
     ];
   }) : [];
 
+  // ── Section 4: Algorithm explanations ───────────────────────────
+  const algorithmHTML = `
+    <section>
+      <h2>Explicación de los Modelos</h2>
+      <div class="algo-grid">
+
+        <div class="algo-card">
+          <div class="algo-name">GBM — Geometric Brownian Motion</div>
+          <div class="algo-eq">dS = μ·S·dt + σ·S·dW</div>
+          <div class="algo-body">
+            <span class="algo-label">Descripción:</span> Modelo estocástico clásico con drift μ y
+            volatilidad σ constantes. Base de la fórmula de Black-Scholes.<br>
+            <span class="algo-label">Ideal para:</span> Activos estables, comparativa base.<br>
+            <span class="algo-label">Limitación:</span> No capta volatilidad variable ni colas gruesas.
+          </div>
+        </div>
+
+        <div class="algo-card">
+          <div class="algo-name">Heston — Volatilidad Estocástica</div>
+          <div class="algo-eq">dv = κ(θ−v)dt + ξ√v·dW<sub>v</sub></div>
+          <div class="algo-body">
+            <span class="algo-label">Descripción:</span> La volatilidad sigue su propio proceso
+            de reversión a la media. Capta la agrupación de volatilidad (clustering).<br>
+            <span class="algo-label">Ideal para:</span> Mercados con episodios de alta/baja vol.<br>
+            <span class="algo-label">Limitación:</span> Mayor coste computacional; parámetros difíciles de calibrar.
+          </div>
+        </div>
+
+        <div class="algo-card">
+          <div class="algo-name">Jump-Diffusion (Merton)</div>
+          <div class="algo-eq">dS = μ·S·dt + σ·S·dW + J·dN</div>
+          <div class="algo-body">
+            <span class="algo-label">Descripción:</span> Añade saltos de Poisson al GBM para
+            modelar eventos discretos (earnings, noticias, crisis).<br>
+            <span class="algo-label">Ideal para:</span> Acciones con riesgo de salto elevado.<br>
+            <span class="algo-label">Limitación:</span> Los parámetros de salto (λ, μ_J, σ_J) son difíciles de estimar.
+          </div>
+        </div>
+
+        <div class="algo-card">
+          <div class="algo-name">GARCH(1,1)</div>
+          <div class="algo-eq">σ²_t = ω + α·ε²_{t-1} + β·σ²_{t-1}</div>
+          <div class="algo-body">
+            <span class="algo-label">Descripción:</span> La varianza condicional hoy depende del
+            shock de ayer y de la varianza de ayer. Modela heterocedasticidad.<br>
+            <span class="algo-label">Ideal para:</span> Series con volatilidad variable en el tiempo.<br>
+            <span class="algo-label">Limitación:</span> Requiere historia suficiente para calibración confiable.
+          </div>
+        </div>
+
+        <div class="algo-card">
+          <div class="algo-name">Bootstrap (No Paramétrico)</div>
+          <div class="algo-eq">r_t ← muestra aleatoria de {r_históricos}</div>
+          <div class="algo-body">
+            <span class="algo-label">Descripción:</span> Remuestrea retornos históricos reales
+            sin asumir ninguna distribución paramétrica.<br>
+            <span class="algo-label">Ideal para:</span> Cuando no se quiere imponer supuestos distribucionales.<br>
+            <span class="algo-label">Limitación:</span> No puede generar escenarios peores que los observados históricamente.
+          </div>
+        </div>
+
+      </div>
+    </section>
+  `;
+
+  // ── Section 5: Macro context ─────────────────────────────────────
+  const macroHTML = macroData ? (() => {
+    const macro = macroData;
+    const yc = macro.yieldCurve;
+    const ycSpread = yc ? ((yc.y10 || 0) - (yc.y2 || 0)).toFixed(2) : '—';
+    const ycLabel = yc
+      ? (parseFloat(ycSpread) < 0 ? 'Invertida (riesgo recesión)' : parseFloat(ycSpread) < 0.5 ? 'Plana' : 'Normal')
+      : '—';
+    const macroSig = macro.signal || {};
+    const sigStyle = macroSig.label === 'Alcista' ? 'color:#0a7c3e;font-weight:bold'
+      : macroSig.label === 'Bajista' ? 'color:#b91c1c;font-weight:bold'
+      : 'color:#92400e;font-weight:bold';
+    return `
+    <section>
+      <h2>Contexto Macro</h2>
+      <div class="macro-grid">
+        <div class="macro-item">
+          <span class="macro-label">Tipo FED</span>
+          <span class="macro-val">${macro.fedRate != null ? macro.fedRate.toFixed(2) + '%' : '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Inflación (CPI)</span>
+          <span class="macro-val">${macro.inflation != null ? macro.inflation.toFixed(2) + '%' : '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">VIX</span>
+          <span class="macro-val">${macro.vix != null ? macro.vix.toFixed(1) : '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Curva 2s10s</span>
+          <span class="macro-val">${ycSpread !== '—' ? ycSpread + '%' : '—'}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Tipo Curva</span>
+          <span class="macro-val">${ycLabel}</span>
+        </div>
+        <div class="macro-item">
+          <span class="macro-label">Señal Macro</span>
+          <span class="macro-val" style="${sigStyle}">${macroSig.label ?? '—'}</span>
+        </div>
+      </div>
+    </section>
+  `;
+  })() : '';
+
+  // ── Section 6: Fundamentals ──────────────────────────────────────
   const fundHTML = fundamentals && !fundamentals.unavailable ? `
     <section>
       <h2>Fundamentales</h2>
       <div class="fund-grid">
-        <div><strong>P/E Trailing</strong> ${fundamentals.valuation?.trailingPE?.toFixed(1) ?? '—'}</div>
-        <div><strong>P/E Forward</strong> ${fundamentals.valuation?.forwardPE?.toFixed(1) ?? '—'}</div>
-        <div><strong>ROE</strong> ${fundamentals.profitability?.returnOnEquity?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Margen Neto</strong> ${fundamentals.profitability?.profitMargins?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Crec. BPA</strong> ${fundamentals.growth?.earningsGrowth?.toFixed(1) ?? '—'}%</div>
-        <div><strong>Deuda/Equity</strong> ${fundamentals.health?.debtToEquity?.toFixed(1) ?? '—'}</div>
-        <div><strong>Target Analistas</strong> $${fundamentals.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
-        <div><strong>Recomendación</strong> ${fundamentals.analystConsensus?.recommendationKey?.toUpperCase() ?? '—'}</div>
-        <div><strong>Cap. Mercado</strong> ${fundamentals.valuation?.marketCap ?? '—'}</div>
-        <div><strong>Beta</strong> ${fundamentals.info?.beta?.toFixed(2) ?? '—'}</div>
+        <div><strong>P/E Trailing</strong>${fundamentals.valuation?.trailingPE?.toFixed(1) ?? '—'}</div>
+        <div><strong>P/E Forward</strong>${fundamentals.valuation?.forwardPE?.toFixed(1) ?? '—'}</div>
+        <div><strong>ROE</strong>${fundamentals.profitability?.returnOnEquity?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Margen Neto</strong>${fundamentals.profitability?.profitMargins?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Crec. BPA</strong>${fundamentals.growth?.earningsGrowth?.toFixed(1) ?? '—'}%</div>
+        <div><strong>Deuda/Equity</strong>${fundamentals.health?.debtToEquity?.toFixed(1) ?? '—'}</div>
+        <div><strong>Target Analistas</strong>$${fundamentals.analystConsensus?.targetMeanPrice?.toFixed(2) ?? '—'}</div>
+        <div><strong>Recomendación</strong>${fundamentals.analystConsensus?.recommendationKey?.toUpperCase() ?? '—'}</div>
+        <div><strong>Cap. Mercado</strong>${fundamentals.valuation?.marketCap ?? '—'}</div>
+        <div><strong>Beta</strong>${fundamentals.info?.beta?.toFixed(2) ?? '—'}</div>
       </div>
     </section>
   ` : '';
 
+  // ── Section 7: News / Sentiment ──────────────────────────────────
   const newsHTML = news?.news?.length ? `
     <section>
-      <h2>Noticias Recientes</h2>
-      <p>Sentimiento: <strong>${news.sentimentIndex?.label ?? '—'}</strong> (Score ${news.sentimentIndex?.score ?? '—'})</p>
+      <h2>Noticias Recientes y Sentimiento</h2>
+      <p class="sentiment-line">Sentimiento general: <strong>${news.sentimentIndex?.label ?? '—'}</strong>
+        &nbsp;·&nbsp; Score: <strong>${news.sentimentIndex?.score ?? '—'}</strong></p>
       <ul class="news-list">
-        ${news.news.slice(0, 6).map(n => `
+        ${news.news.slice(0, 8).map(n => `
           <li>
             <span class="news-date">${n.date ? new Date(n.date).toLocaleDateString('es-ES') : '—'}</span>
             <span class="news-title">${n.title}</span>
-            <span class="news-sentiment" style="color:${n.sentiment?.color}">${n.sentiment?.label ?? ''}</span>
+            <span class="news-sentiment" style="color:${n.sentiment?.color ?? '#555'}">${n.sentiment?.label ?? ''}</span>
           </li>
         `).join('')}
       </ul>
     </section>
   ` : '';
 
+  // ── Assemble full HTML document ──────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -275,56 +432,107 @@ export function exportSimulationPDF(symbol, results, metrics, backtest, fundamen
 <title>Informe Monte Carlo — ${symbol}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  h2 { font-size: 14px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 16px 0 8px; }
-  .meta { color: #555; font-size: 10px; margin-bottom: 16px; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 24px 28px; }
+  h1 { font-size: 22px; margin-bottom: 2px; }
+  h2 { font-size: 13px; background: #1a1a1a; color: #f0d060; padding: 5px 8px; margin: 20px 0 8px; letter-spacing: .5px; }
+  .meta { color: #555; font-size: 10px; margin-bottom: 18px; }
+
+  /* Tables */
   table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }
-  th { background: #1a1a1a; color: #fff; padding: 4px 6px; text-align: left; }
-  td { padding: 3px 6px; border-bottom: 1px solid #eee; }
-  tr:nth-child(even) td { background: #f9f9f9; }
-  .fund-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  .fund-grid div { background: #f5f5f5; padding: 6px 8px; border-radius: 4px; }
-  .fund-grid strong { display: block; font-size: 9px; color: #555; margin-bottom: 2px; }
+  th { background: #2a2a2a; color: #f0d060; padding: 4px 6px; text-align: left; font-size: 9px; text-transform: uppercase; }
+  td { padding: 3px 6px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8f8f6; }
+
+  /* Fundamentals grid */
+  .fund-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 4px; }
+  .fund-grid div { background: #f5f5f5; padding: 6px 8px; border-radius: 3px; border-left: 3px solid #c9a227; }
+  .fund-grid strong { display: block; font-size: 9px; color: #888; margin-bottom: 2px; text-transform: uppercase; }
+
+  /* Macro grid */
+  .macro-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 4px; }
+  .macro-item { background: #f5f5f5; padding: 6px 8px; border-radius: 3px; border-left: 3px solid #1a1a1a; text-align: center; }
+  .macro-label { display: block; font-size: 9px; color: #888; text-transform: uppercase; margin-bottom: 3px; }
+  .macro-val { display: block; font-size: 12px; font-weight: bold; }
+
+  /* Algorithm cards */
+  .algo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+  .algo-card { background: #f9f9f7; border: 1px solid #e0d9b5; border-radius: 4px; padding: 8px 10px; }
+  .algo-name { font-weight: bold; font-size: 10px; margin-bottom: 3px; color: #1a1a1a; }
+  .algo-eq { font-family: 'Courier New', monospace; font-size: 9px; background: #f0ead8; padding: 3px 6px; border-radius: 2px; margin-bottom: 4px; }
+  .algo-body { font-size: 9px; color: #444; line-height: 1.5; }
+  .algo-label { font-weight: bold; color: #1a1a1a; }
+
+  /* News */
+  .sentiment-line { margin-bottom: 6px; }
   .news-list { list-style: none; }
   .news-list li { padding: 4px 0; border-bottom: 1px solid #eee; display: flex; gap: 8px; align-items: flex-start; }
-  .news-date { color: #888; white-space: nowrap; font-size: 9px; min-width: 60px; }
-  .news-sentiment { font-size: 9px; font-weight: bold; white-space: nowrap; }
-  .disclaimer { margin-top: 20px; font-size: 9px; color: #888; border-top: 1px solid #eee; padding-top: 8px; }
+  .news-date { color: #888; white-space: nowrap; font-size: 9px; min-width: 65px; padding-top: 1px; }
+  .news-title { flex: 1; }
+  .news-sentiment { font-size: 9px; font-weight: bold; white-space: nowrap; padding-top: 1px; }
+
+  /* Disclaimer */
+  .disclaimer { margin-top: 24px; font-size: 9px; color: #888; border-top: 1px solid #ddd; padding-top: 8px; line-height: 1.6; }
+
+  /* Print */
   @media print {
-    body { padding: 10px; }
-    @page { margin: 1cm; }
+    body { padding: 8px 10px; }
+    @page { margin: 1.2cm; size: A4; }
+    h2 { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .algo-card, .macro-item, .fund-grid div { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
 <body>
 
 <h1>Monte Carlo Stock Simulator — ${symbol}</h1>
-<div class="meta">Informe generado el ${ts} · Monte Carlo Stock Simulator v3.0</div>
+<div class="meta">Informe generado el ${ts} &nbsp;·&nbsp; Monte Carlo Stock Simulator v3.0 &nbsp;·&nbsp; Datos: Yahoo Finance (sin garantía de exactitud)</div>
 
+<!-- 1. Signal Summary -->
 <section>
-  <h2>Resumen por Modelo</h2>
+  <h2>Señal y Resumen por Modelo</h2>
   ${table(
-    ['Modelo', 'Precio Esperado', 'Retorno %', 'P(Subida)', 'VaR 95%', 'MDD Medio', 'Sharpe', 'Señal'],
-    summaryRows
+    ['Modelo', 'Precio Esperado', 'Retorno %', 'P(Subida)', 'Sharpe', 'Sortino', 'Señal', 'Score'],
+    signalRows
   )}
 </section>
 
+<!-- 2. Risk Metrics -->
+<section>
+  <h2>Métricas de Riesgo</h2>
+  ${table(
+    ['Modelo', 'VaR 95%', 'CVaR 95%', 'VaR 99%', 'CVaR 99%', 'MDD Medio', 'P(−10%)', 'P(−20%)', 'Vol 30d', 'Vol Anual'],
+    riskRows
+  )}
+</section>
+
+<!-- 3. Backtest -->
 ${btRows.length > 0 ? `
 <section>
   <h2>Validación Histórica (Backtest)</h2>
   ${table(
-    ['Modelo', 'Score', 'Acierto Dirección', 'Error Medio %', 'Cobertura IC95%'],
+    ['Modelo', 'Score', 'Acierto Dirección', 'Error Medio %', 'Error Mediano %', 'Cobertura IC95%', 'Checkpoints'],
     btRows
   )}
 </section>` : ''}
 
+<!-- 4. Algorithm Explanations -->
+${algorithmHTML}
+
+<!-- 5. Macro Context -->
+${macroHTML}
+
+<!-- 6. Fundamentals -->
 ${fundHTML}
+
+<!-- 7. News / Sentiment -->
 ${newsHTML}
 
+<!-- 8. Disclaimer -->
 <div class="disclaimer">
-  Los resultados de este simulador son de naturaleza estadística y no constituyen asesoramiento financiero.
-  Invierta únicamente lo que esté dispuesto a perder. Monte Carlo Stock Simulator v3.0 · Datos: Yahoo Finance.
+  <strong>Aviso legal:</strong> Los resultados de este simulador son de naturaleza puramente estadística y se basan en datos históricos.
+  No constituyen asesoramiento financiero, de inversión, legal ni fiscal. Las simulaciones de Monte Carlo no garantizan resultados futuros.
+  Invierta únicamente el capital que esté dispuesto a perder. Consulte a un asesor financiero certificado antes de tomar decisiones de inversión.
+  Monte Carlo Stock Simulator v3.0 &nbsp;·&nbsp; Datos proporcionados por Yahoo Finance sin garantía de exactitud ni integridad.
 </div>
 
 </body>
@@ -332,15 +540,14 @@ ${newsHTML}
 
   const win = window.open('', '_blank');
   if (!win) {
-    alert('Activa las ventanas emergentes para generar el PDF');
+    alert('Activa las ventanas emergentes para generar el PDF.');
     return;
   }
   win.document.write(html);
   win.document.close();
   win.focus();
-  win.onload = () => {
-    win.print();
-  };
+  // Small delay so styles render before print dialog opens
+  setTimeout(() => win.print(), 400);
 }
 
 // ── Shared helpers ───────────────────────────────────────────────

@@ -451,6 +451,12 @@ main {
   flex-wrap: wrap;
 }
 
+/* PDF button in stock header — pushed to the far right */
+.stock-header #pdfHeaderBtn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .btn-back {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
