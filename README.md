@@ -1,4 +1,4 @@
-# Monte Carlo Stock Simulator — v3.0
+# Monte Carlo Stock Simulator — v3.1
 
 Aplicación web completa para simulación Monte Carlo de acciones bursátiles con diseño LiquidGlass. Desplegada en GitHub Pages, sin servidor.
 
@@ -8,15 +8,30 @@ Live: [https://ntizar.github.io/MonteCarloInversion/](https://ntizar.github.io/M
 
 ---
 
-## Novedades en v3.0
+## Changelog
 
+### v3.1 — PDF export completo + fix deploy
+- **Botón PDF en cabecera de acción** — Aparece solo tras ejecutar la simulación, empujado al extremo derecho del header.
+- **Informe PDF completo** — Abre una ventana imprimible con 8 secciones:
+  1. Señal y resumen por modelo (precio esperado, retorno, P(subida), Sharpe, Sortino, señal, score)
+  2. Métricas de riesgo expandidas (VaR/CVaR al 95% y 99%, MDD, P(−10%), P(−20%), vol 30d y anual)
+  3. Validación histórica (score, acierto direccional, error medio/mediano, cobertura IC95%, checkpoints)
+  4. Explicación de los 5 modelos (ecuación, caso de uso ideal, limitación)
+  5. Contexto macro (tipo FED, inflación, VIX, curva 2s10s, señal macro)
+  6. Fundamentales
+  7. Noticias y sentimiento (hasta 8 noticias)
+  8. Aviso legal
+- **Fix bug crítico** — Las dos llamadas a `exportSimulationPDF()` pasaban solo el símbolo; ahora pasan los 7 parámetros de estado.
+- **Fix deploy** — GitHub Actions workflow que publica `public/` en rama `gh-pages` automáticamente en cada push a `main`.
+
+### v3.0 — Arquitectura completa
 - **Web Workers** — Las simulaciones Monte Carlo se ejecutan en un hilo secundario; la UI nunca se bloquea.
 - **Cache IndexedDB** — Datos de precio, macro y fundamentales se cachean con TTL por tipo; no se recargan en cada visita.
 - **Datos macro (FRED API)** — Tipo de interés FED, inflación PCE, VIX, curva de tipos, spread crediticio. Sin API key.
 - **Fundamentales (Yahoo Finance)** — P/E, P/B, EPS, márgenes, deuda, dividendo y más, via CORS proxy.
 - **Noticias y sentimiento** — Feed RSS de Yahoo Finance con análisis de sentimiento por titular.
 - **Screener** — Filtros por señal, Sharpe, VaR, retorno esperado y ordenación dinámica sobre el ranking del radar.
-- **Exportar PDF / CSV** — Descarga el informe de simulación o el ranking del mercado en un click.
+- **Exportar CSV** — Descarga el ranking del mercado en un click.
 - **Tab Contexto** — Nueva pestaña por acción que integra macro, fundamentales y noticias en una sola vista.
 - **Cadena de proxies CORS robusta** — allorigins.win → corsproxy.io → codetabs.com con detección automática de entorno GitHub Pages.
 
@@ -82,7 +97,11 @@ MonteCarloInversion/
 
 La app está desplegada en **GitHub Pages** — estática, sin servidor, sin build step.
 
-Para actualizar: hacer push a `main`. GitHub Pages se actualiza automáticamente.
+El workflow `.github/workflows/deploy.yml` publica automáticamente el contenido de `public/`
+en la rama `gh-pages` cada vez que se hace push a `main`.
+
+**Configuración requerida en el repo (una sola vez):**
+Settings → Pages → Source → Deploy from a branch → Branch: `gh-pages` / `/ (root)`
 
 ---
 
